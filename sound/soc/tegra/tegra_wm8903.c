@@ -384,6 +384,31 @@ static struct snd_soc_dai_link tegra_wm8903_dai[] = {
 	},
 };
 
+static int tegra_wm8903_suspend_post(struct snd_soc_card *card)
+{
+	struct snd_soc_jack_gpio *gpio = &tegra_wm8903_hp_jack_gpio;
+
+	if (gpio_is_valid(gpio->gpio))
+		disable_irq(gpio_to_irq(gpio->gpio));
+
+	return 0;
+}
+
+static int tegra_wm8903_resume_pre(struct snd_soc_card *card)
+{
+	struct snd_soc_jack_gpio *gpio = &tegra_wm8903_hp_jack_gpio;
+	int val;
+
+	if (gpio_is_valid(gpio->gpio)) {
+		val = gpio_get_value(gpio->gpio);
+		val = gpio->invert ? !val : val;
+		snd_soc_jack_report(gpio->jack, val, gpio->report);
+		enable_irq(gpio_to_irq(gpio->gpio));
+	}
+
+	return 0;
+}
+
 static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.name = "tegra-wm8903",
 	.owner = THIS_MODULE,
@@ -395,6 +420,9 @@ static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.dapm_widgets = tegra_wm8903_dapm_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(tegra_wm8903_dapm_widgets),
 	.fully_routed = true,
+
+	.suspend_post = tegra_wm8903_suspend_post,
+	.resume_pre = tegra_wm8903_resume_pre,
 };
 
 static int tegra_wm8903_driver_probe(struct platform_device *pdev)
