@@ -342,6 +342,8 @@ static void l2x0_unlock(u32 cache_id)
 	int lockregs;
 	int i;
 
+	cache_id &= L2X0_CACHE_ID_PART_MASK;
+
 	switch (cache_id) {
 	case L2X0_CACHE_ID_PART_L310:
 		lockregs = 8;
