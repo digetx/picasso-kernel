@@ -49,6 +49,9 @@ static void try_to_suspend(struct work_struct *work)
 
 	mutex_unlock(&autosleep_lock);
 
+	if (IS_ENABLED(CONFIG_PM_EARLYSUSPEND))
+		schedule_timeout_uninterruptible(HZ * 2);
+
 	if (!pm_get_wakeup_count(&final_count, false))
 		goto out;
 

@@ -8,6 +8,7 @@
  *
  */
 
+#include <linux/earlysuspend.h>
 #include <linux/export.h>
 #include <linux/kobject.h>
 #include <linux/string.h>
@@ -340,6 +341,22 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	suspend_state_t state;
 	int error;
+
+	state = decode_state(buf, n);
+
+#ifdef CONFIG_PM_AUTOSLEEP
+	if (IS_ENABLED(CONFIG_PM_EARLYSUSPEND)) {
+		if (state == PM_SUSPEND_MEM)
+			pm_request_early_suspend_state(state);
+
+		error = pm_autosleep_set_state(state);
+
+		if (state == PM_SUSPEND_ON)
+			pm_request_early_suspend_state(state);
+
+		return error ? error : n;
+	}
+#endif
 
 	error = pm_autosleep_lock();
 	if (error)

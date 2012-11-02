@@ -138,6 +138,14 @@ config PM_WAKELOCKS_GC
 	depends on PM_WAKELOCKS
 	default y
 
+config PM_EARLYSUSPEND
+	bool "Early suspend"
+	depends on PM_AUTOSLEEP
+	default n
+	---help---
+	  Call early suspend handlers when the user requested sleep state
+	  changes.
+
 config PM_RUNTIME
 	bool "Run-time PM core functionality"
 	depends on !IA64_HP_SIM
