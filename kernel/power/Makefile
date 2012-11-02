@@ -18,3 +18,4 @@ obj-$(CONFIG_MAGIC_SYSRQ)	+= poweroff.o
 obj-$(CONFIG_SUSPEND)	+= wakeup_reason.o
 
 obj-$(CONFIG_PM_EARLYSUSPEND)	+= earlysuspend.o
+obj-$(CONFIG_PM_FB_EARLYSUSPEND)	+= fbearlysuspend.o

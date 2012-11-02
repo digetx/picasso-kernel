@@ -146,6 +146,15 @@ config PM_EARLYSUSPEND
 	  Call early suspend handlers when the user requested sleep state
 	  changes.
 
+config PM_FB_EARLYSUSPEND
+	bool "Framebuffer Early Suspend (sysfs interface)"
+	depends on PM_EARLYSUSPEND
+	default n
+	---help---
+	  Register early suspend handler that notifies and waits for
+	  user-space through sysfs when user-space should stop drawing
+	  to the screen and notifies user-space when it should resume.
+
 config PM_RUNTIME
 	bool "Run-time PM core functionality"
 	depends on !IA64_HP_SIM
