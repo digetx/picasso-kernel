@@ -17,6 +17,7 @@
 #define _LINUX_PM_EARLYSUSPEND_H
 
 #include <linux/list.h>
+#include <linux/suspend.h>
 
 /* The early_suspend structure defines suspend and resume hooks to be called
  * when the user visible sleep state of the system changes, and a level to
@@ -42,5 +43,7 @@ struct early_suspend {
 
 void register_early_suspend(struct early_suspend *handler);
 void unregister_early_suspend(struct early_suspend *handler);
+
+void pm_request_early_suspend_state(suspend_state_t state);
 
 #endif
