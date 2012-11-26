@@ -19,6 +19,7 @@ struct vm_area_struct;
 struct fb_info;
 struct device;
 struct file;
+struct videomode;
 
 #define FB_FLAG_RATIO_4_3       64
 #define FB_FLAG_RATIO_16_9      128
@@ -728,6 +729,11 @@ extern void fb_edid_add_monspecs(unsigned char *edid,
 extern void fb_destroy_modedb(struct fb_videomode *modedb);
 extern int fb_find_mode_cvt(struct fb_videomode *mode, int margins, int rb);
 extern unsigned char *fb_ddc_read(struct i2c_adapter *adapter);
+
+#if IS_ENABLED(CONFIG_VIDEOMODE)
+extern int fb_videomode_from_videomode(const struct videomode *vm,
+				       struct fb_videomode *fbmode);
+#endif
 
 /* drivers/video/modedb.c */
 #define VESA_MODEDB_SIZE 34
