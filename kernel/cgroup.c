@@ -1969,7 +1969,6 @@ int cgroup_attach_task(struct cgroup *cgrp, struct task_struct *tsk)
 	}
 
 	set_bit(CGRP_RELEASABLE, &cgrp->flags);
-	synchronize_rcu();
 out:
 	if (retval) {
 		for_each_subsys(root, ss) {
@@ -2138,7 +2137,6 @@ static int cgroup_attach_proc(struct cgroup *cgrp, struct task_struct *leader)
 	/*
 	 * step 5: success! and cleanup
 	 */
-	synchronize_rcu();
 	retval = 0;
 out_put_css_set_refs:
 	if (retval) {
