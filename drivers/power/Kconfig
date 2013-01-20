@@ -356,6 +356,18 @@ config AB8500_BM
 	help
 	  Say Y to include support for AB8500 battery management.
 
+config EC_CONTROL
+	tristate "Acer a50x EC and battery charger driver"
+	depends on I2C
+	help
+	  Say Y to include support for EC control and battery behind EC.
+
+config LSC_FROM_EC
+	tristate "Load Lens Correction data from EC by Camera MI5140 2nd source(nonOTPM)"
+	depends on I2C && EC_CONTROL
+	help
+	  Say Y to include support for Load Lens Correction data from EC.
+
 source "drivers/power/reset/Kconfig"
 
 endif # POWER_SUPPLY

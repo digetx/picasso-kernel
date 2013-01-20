@@ -350,6 +350,12 @@
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+
+			ec-control@58 {
+				compatible = "ec,ec-control";
+				reg = <0x58>;
+				ec,i2c-retry-count = <5>;
+			};
 		};
 	};
 
