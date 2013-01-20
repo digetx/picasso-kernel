@@ -136,6 +136,7 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun4i-a10-cubieboard.dtb \
 dtb-$(CONFIG_ARCH_TEGRA) += tegra20-harmony.dtb \
 	tegra20-medcom-wide.dtb \
 	tegra20-paz00.dtb \
+	tegra20-picasso.dtb \
 	tegra20-plutux.dtb \
 	tegra20-seaboard.dtb \
 	tegra20-tec.dtb \
