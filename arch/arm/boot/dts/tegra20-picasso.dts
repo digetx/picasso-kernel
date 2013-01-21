@@ -559,4 +559,9 @@
 		status = "okay";
 		nvidia,vbus-gpio = <&gpio 27 0>; /* gpio PD3 */
 	};
+
+	ram-console {
+		compatible = "android,ram-console";
+		reg = <0x0 0x0>;
+	};
 };
