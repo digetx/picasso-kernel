@@ -33,6 +33,9 @@
 #define TEGRA_USB_BASE		0xC5000000
 #define TEGRA_USB_SIZE		SZ_16K
 
+#define TEGRA_AHB_GIZMO_BASE	0x6000C004
+#define TEGRA_AHB_GIZMO_SIZE	0x10C
+
 #define ULPI_VIEWPORT		0x170
 
 #define USB_PORTSC1		0x184
@@ -140,6 +143,10 @@
 #define UTMIP_BIAS_CFG1		0x83c
 #define   UTMIP_BIAS_PDTRK_COUNT(x)	(((x) & 0x1f) << 3)
 
+#define AHB_MEM_PREFETCH_CFG1		0xec
+#define   AHB_MEM_PREFETCH_CFG2		0xf0
+#define   PREFETCH_ENB			(1 << 31)
+
 static DEFINE_SPINLOCK(utmip_pad_lock);
 static int utmip_pad_count;
 
@@ -223,6 +230,10 @@ static int utmip_pad_open(struct tegra_usb_phy *phy)
 
 	if (phy->instance == 0) {
 		phy->pad_regs = phy->regs;
+
+		if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE)
+			phy->ahb_gizmo = ioremap(TEGRA_AHB_GIZMO_BASE,
+						 TEGRA_AHB_GIZMO_SIZE);
 	} else {
 		phy->pad_regs = ioremap(TEGRA_USB_BASE, TEGRA_USB_SIZE);
 		if (!phy->pad_regs) {
@@ -238,6 +249,8 @@ static void utmip_pad_close(struct tegra_usb_phy *phy)
 {
 	if (phy->instance != 0)
 		iounmap(phy->pad_regs);
+	else if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE)
+		iounmap(phy->ahb_gizmo);
 	clk_put(phy->pad_clk);
 }
 
@@ -838,3 +851,33 @@ void tegra_usb_phy_clk_enable(struct tegra_usb_phy *phy)
 		utmi_phy_clk_enable(phy);
 }
 EXPORT_SYMBOL_GPL(tegra_usb_phy_clk_enable);
+
+void tegra_usb_phy_memory_prefetch_on(struct tegra_usb_phy *phy)
+{
+	unsigned long val;
+
+	if (phy->instance == 0 && phy->mode == TEGRA_USB_PHY_MODE_DEVICE) {
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val |= PREFETCH_ENB;
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+		val |= PREFETCH_ENB;
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+	}
+}
+EXPORT_SYMBOL_GPL(tegra_usb_phy_memory_prefetch_on);
+
+void tegra_usb_phy_memory_prefetch_off(struct tegra_usb_phy *phy)
+{
+	unsigned long val;
+
+	if (phy->instance == 0 && phy->mode == TEGRA_USB_PHY_MODE_DEVICE) {
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val &= ~(PREFETCH_ENB);
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+		val &= ~(PREFETCH_ENB);
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+	}
+}
+EXPORT_SYMBOL_GPL(tegra_usb_phy_memory_prefetch_off);

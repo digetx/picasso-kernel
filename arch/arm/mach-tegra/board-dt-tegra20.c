@@ -69,6 +69,10 @@ struct tegra_ehci_platform_data tegra_ehci3_pdata = {
 	.vbus_gpio = -1,
 };
 
+struct tegra_ehci_platform_data tegra_udc_pdata = {
+	.operating_mode	= TEGRA_USB_DEVICE,
+};
+
 struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC1_BASE, "sdhci-tegra.0", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC2_BASE, "sdhci-tegra.1", NULL),
@@ -85,6 +89,10 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 		       &tegra_ehci1_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-ehci", TEGRA_USB2_BASE, "tegra-ehci.1",
 		       &tegra_ehci2_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-otg", TEGRA_USB_BASE, "tegra-otg",
+		       &tegra_ehci1_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-udc", TEGRA_USB_BASE, "tegra-udc.0",
+		       &tegra_udc_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-ehci", TEGRA_USB3_BASE, "tegra-ehci.2",
 		       &tegra_ehci3_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-apbdma", TEGRA_APB_DMA_BASE, "tegra-apbdma", NULL),
@@ -169,6 +177,10 @@ static void __init paz00_init(void)
 	tegra_paz00_wifikill_init();
 }
 
+static void __init picasso_init(void)
+{
+}
+
 static struct {
 	char *machine;
 	void (*init)(void);
@@ -176,6 +188,7 @@ static struct {
 	{ "compulab,trimslice", trimslice_init },
 	{ "nvidia,harmony", harmony_init },
 	{ "compal,paz00", paz00_init },
+	{ "acer,picasso", picasso_init },
 };
 
 static void __init tegra_dt_init_late(void)

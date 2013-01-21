@@ -162,7 +162,7 @@ static struct usb_configuration android_config_driver = {
 	.unbind		= android_unbind_config,
 	.bConfigurationValue = 1,
 	.bmAttributes	= USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
-	.bMaxPower	= 0xFA, /* 500ma */
+	.bMaxPower	= 0x32, /* 100ma */
 };
 
 static void android_work(struct work_struct *data)

@@ -502,4 +502,22 @@
 	pmc {
 		nvidia,invert-interrupt;
 	};
+
+	usb-otg@c5000000 {
+		compatible = "nvidia,tegra20-otg";
+		reg = <0xc5000000 0x4000>;
+		interrupts = <0 20 0x04>;
+		nvidia,vbus-gpio = <&gpio 24 0>; /* gpio PD0 */
+	};
+
+	usb-udc@c5000000 {
+		compatible = "nvidia,tegra20-udc";
+		reg = <0xc5000000 0x4000>;
+		interrupts = <0 20 0x04>;
+	};
+
+	usb@c5008000 {
+		status = "okay";
+		nvidia,vbus-gpio = <&gpio 27 0>; /* gpio PD3 */
+	};
 };
