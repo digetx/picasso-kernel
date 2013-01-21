@@ -457,10 +457,10 @@
 					regulator-always-on;
 				};
 
-				ldo5 {
+				mmc_vdd_reg: ldo5 {
 					regulator-name = "vdd_ldo5,vcore_mmc";
-					regulator-min-microvolt = <2850000>;
-					regulator-max-microvolt = <2850000>;
+					regulator-min-microvolt = <1250000>;
+					regulator-max-microvolt = <3300000>;
 					regulator-always-on;
 				};
 
@@ -501,6 +501,13 @@
 
 	pmc {
 		nvidia,invert-interrupt;
+	};
+
+	sdhci@c8000600 {
+		status = "okay";
+		built-in;
+		bus-width = <8>;
+		vmmc-supply = <&mmc_vdd_reg>;
 	};
 
 	usb-otg@c5000000 {
