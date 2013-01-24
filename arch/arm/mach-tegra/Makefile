@@ -9,6 +9,11 @@ obj-y					+= flowctrl.o
 obj-y					+= powergate.o
 obj-y					+= apbio.o
 obj-y					+= pm.o
+obj-y					+= reserve.o
+obj-y                                   += mc.o
+obj-y                                   += csi.o
+obj-y                                   += kfuse.o
+obj-$(CONFIG_TEGRA_GRHOST)              += syncpt.o
 obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
 obj-$(CONFIG_CPU_IDLE)			+= sleep.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += tegra20_clocks.o
@@ -38,3 +43,6 @@ obj-$(CONFIG_ARCH_TEGRA_3x_SOC)		+= board-dt-tegra30.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= board-harmony-pcie.o
 
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= board-paz00.o
+
+# REMOVE LATER
+obj-y                                   += board-picasso-panel.o

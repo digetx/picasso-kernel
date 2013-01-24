@@ -391,23 +391,25 @@
 		};
 
 		regulator@1 {
-			compatible = "regulator-fixed";
+			compatible = "regulator-gpio";
 			reg = <1>;
 			regulator-name = "vdd_pnl";
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <2800000>;
 			gpio = <&gpio 22 0>; /* gpio PC6 */
 			enable-active-high;
+			enable-at-boot;
 		};
 
 		regulator@2 {
-			compatible = "regulator-fixed";
+			compatible = "regulator-gpio";
 			reg = <2>;
 			regulator-name = "vdd_bl";
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <2800000>;
 			gpio = <&gpio 28 0>; /* gpio PD4 */
 			enable-active-high;
+			enable-at-boot;
 		};
 	};
 
@@ -563,5 +565,13 @@
 	ram-console {
 		compatible = "android,ram-console";
 		reg = <0x0 0x0>;
+	};
+
+	backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm 2 41667>;
+
+		brightness-levels = <0 4 8 16 32 64 128 255>;
+		default-brightness-level = <6>;
 	};
 };

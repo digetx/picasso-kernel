@@ -33,7 +33,6 @@
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
 #include <linux/usb/tegra_usb_phy.h>
-#include <linux/memblock.h>
 
 #include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
@@ -45,6 +44,7 @@
 #include "clock.h"
 #include "common.h"
 #include "iomap.h"
+#include "reserve.h"
 
 struct tegra_ehci_platform_data tegra_ehci1_pdata = {
 	.operating_mode = TEGRA_USB_OTG,
@@ -112,14 +112,6 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	{}
 };
 
-#define RAM_CONSOLE_SIZE	SZ_1M
-static phys_addr_t ram_console_reserved;
-
-static const struct of_device_id ram_console_matches[] __initconst = {
-	{ .compatible = "android,ram-console" },
-	{ }
-};
-
 static __initdata struct tegra_clk_init_table tegra_dt_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "uarta",	"pll_p",	216000000,	true },
@@ -147,29 +139,12 @@ static __initdata struct tegra_clk_init_table tegra_dt_clk_init_table[] = {
 	{ NULL,		NULL,		0,		0},
 };
 
+extern void picasso_panel_init(void);
 static void __init tegra_dt_init(void)
 {
 	tegra_clk_init_from_table(tegra_dt_clk_init_table);
 
-	/*
-	 * Assign reserved mem to ram console resource
-	 */
-	if (ram_console_reserved && of_have_populated_dt()) {
-		struct device_node *np;
-
-		np = of_find_matching_node(NULL, ram_console_matches);
-		if (np) {
-			struct property *prop;
-
-			prop = of_find_property(np, "reg", NULL);
-			if (prop) {
-				__be32 *reg = prop->value;
-				/* Override start; size */
-				reg[0] = cpu_to_be32(ram_console_reserved);
-				reg[1] = cpu_to_be32(RAM_CONSOLE_SIZE);
-			}
-		}
-	}
+	tegra_dt_reserved_init();
 
 	/*
 	 * Finished with the static registrations now; fill in the missing
@@ -177,6 +152,7 @@ static void __init tegra_dt_init(void)
 	 */
 	of_platform_populate(NULL, of_default_bus_match_table,
 				tegra20_auxdata_lookup, NULL);
+	picasso_panel_init();
 }
 
 static void __init trimslice_init(void)
@@ -206,8 +182,14 @@ static void __init paz00_init(void)
 	tegra_paz00_wifikill_init();
 }
 
+static __initdata struct tegra_clk_init_table tegra_picasso_clk_init_table[] = {
+	{ "pwm",	"clk_m",	12000000,	false },
+	{ NULL,		NULL,		0,		0},
+};
+
 static void __init picasso_init(void)
 {
+	tegra_clk_init_from_table(tegra_picasso_clk_init_table);
 }
 
 static struct {
@@ -234,18 +216,6 @@ static void __init tegra_dt_init_late(void)
 	}
 }
 
-static void __init tegra_dt_reserve(void)
-{
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-#ifndef CONFIG_ANDROID_RAM_CONSOLE_EARLY_INIT
-	ram_console_reserved = memblock_end_of_DRAM() - RAM_CONSOLE_SIZE;
-
-	if (memblock_remove(ram_console_reserved, RAM_CONSOLE_SIZE))
-#endif
-#endif
-		ram_console_reserved = 0;
-}
-
 static const char *tegra20_dt_board_compat[] = {
 	"nvidia,tegra20",
 	NULL
@@ -253,7 +223,7 @@ static const char *tegra20_dt_board_compat[] = {
 
 DT_MACHINE_START(TEGRA_DT, "nVidia Tegra20 FDT")
 	.map_io		= tegra_map_common_io,
-	.reserve	= tegra_dt_reserve,
+	.reserve	= tegra_reserve_common,
 	.smp		= smp_ops(tegra_smp_ops),
 	.init_early	= tegra20_init_early,
 	.init_irq	= tegra_dt_init_irq,

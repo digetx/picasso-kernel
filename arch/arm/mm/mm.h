@@ -78,3 +78,12 @@ extern phys_addr_t arm_lowmem_limit;
 void __init bootmem_init(void);
 void arm_mm_memblock_reserve(void);
 void dma_contiguous_remap(void);
+
+void update_page_count(int level, unsigned long pages);
+
+enum {
+	PG_LEVEL_NONE,
+	PG_LEVEL_4K,
+	PG_LEVEL_2M,
+	PG_LEVEL_NUM
+};

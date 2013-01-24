@@ -20,6 +20,21 @@ struct fb_info;
 struct device;
 struct file;
 
+#define FB_FLAG_RATIO_4_3       64
+#define FB_FLAG_RATIO_16_9      128
+#define FB_FLAG_PIXEL_REPEAT    256
+
+/*
+ * Stereo modes
+ */
+#define FB_VMODE_STEREO_NONE        0x00000000  /* not stereo */
+#define FB_VMODE_STEREO_FRAME_PACK  0x01000000  /* frame packing */
+#define FB_VMODE_STEREO_TOP_BOTTOM  0x02000000  /* top-bottom */
+#define FB_VMODE_STEREO_LEFT_RIGHT  0x04000000  /* left-right */
+#define FB_VMODE_STEREO_MASK        0xFF000000
+
+#define FB_MISC_HDMI		4	/* display supports HDMI signaling */
+
 /* Definitions below are used in the parsed monitor specs */
 #define FB_DPMS_ACTIVE_OFF	1
 #define FB_DPMS_SUSPEND		2
@@ -716,6 +731,7 @@ extern unsigned char *fb_ddc_read(struct i2c_adapter *adapter);
 
 /* drivers/video/modedb.c */
 #define VESA_MODEDB_SIZE 34
+#define CEA_MODEDB_SIZE 65
 extern void fb_var_to_videomode(struct fb_videomode *mode,
 				const struct fb_var_screeninfo *var);
 extern void fb_videomode_to_var(struct fb_var_screeninfo *var,
@@ -768,7 +784,7 @@ struct fb_videomode {
 
 extern const char *fb_mode_option;
 extern const struct fb_videomode vesa_modes[];
-extern const struct fb_videomode cea_modes[64];
+extern const struct fb_videomode cea_modes[];
 
 struct fb_modelist {
 	struct list_head list;

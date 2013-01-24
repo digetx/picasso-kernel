@@ -161,6 +161,10 @@
 
 static void __iomem *reg_clk_base = IO_ADDRESS(TEGRA_CLK_RESET_BASE);
 static void __iomem *reg_pmc_base = IO_ADDRESS(TEGRA_PMC_BASE);
+static void __iomem *misc_gp_hidrev_base = IO_ADDRESS(TEGRA_APB_MISC_BASE);
+
+#define MISC_GP_HIDREV			0x804
+#define PLLDU_LFCON_SET_DIVN		600
 
 /*
  * Some clocks share a register with other clocks.  Any clock op that
@@ -183,6 +187,8 @@ static int tegra_periph_clk_enable_refcount[3 * 32];
 	__raw_writel(value, reg_pmc_base + (reg))
 #define pmc_readl(reg) \
 	__raw_readl(reg_pmc_base + (reg))
+#define chipid_readl() \
+	__raw_readl(misc_gp_hidrev_base + MISC_GP_HIDREV)
 
 static unsigned long clk_measure_input_freq(void)
 {
@@ -513,8 +519,15 @@ static int tegra20_bus_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 static long tegra20_bus_clk_round_rate(struct clk_hw *hw, unsigned long rate,
 				unsigned long *prate)
 {
+	struct clk_tegra *c = to_clk_tegra(hw);
 	unsigned long parent_rate = *prate;
 	s64 divider;
+
+	if (c->max_rate)
+		rate = min(c->max_rate, rate);
+
+	if (c->min_rate)
+		rate = max(c->min_rate, rate);
 
 	if (rate >= parent_rate)
 		return rate;
@@ -639,9 +652,16 @@ static int tegra20_blink_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 static long tegra20_blink_clk_round_rate(struct clk_hw *hw, unsigned long rate,
 				unsigned long *prate)
 {
+	struct clk_tegra *c = to_clk_tegra(hw);
 	int div;
 	int mul;
 	long round_rate = *prate;
+
+	if (c->max_rate)
+		rate = min(c->max_rate, rate);
+
+	if (c->min_rate)
+		rate = max(c->min_rate, rate);
 
 	mul = 1;
 
@@ -735,6 +755,12 @@ static int tegra20_pll_clk_enable(struct clk_hw *hw)
 	val |= PLL_BASE_ENABLE;
 	clk_writel(val, c->reg + PLL_BASE);
 
+	if (c->flags & PLLD) {
+		val = clk_readl(c->reg + PLL_MISC(c) + PLL_BASE);
+		val |= PLLD_MISC_CLKENABLE;
+		clk_writel(val, c->reg + PLL_MISC(c) + PLL_BASE);
+	}
+
 	tegra20_pll_clk_wait_for_lock(c);
 
 	return 0;
@@ -749,14 +775,25 @@ static void tegra20_pll_clk_disable(struct clk_hw *hw)
 	val = clk_readl(c->reg);
 	val &= ~(PLL_BASE_BYPASS | PLL_BASE_ENABLE);
 	clk_writel(val, c->reg);
+
+	if (c->flags & PLLD) {
+		val = clk_readl(c->reg + PLL_MISC(c) + PLL_BASE);
+		val &= ~PLLD_MISC_CLKENABLE;
+		clk_writel(val, c->reg + PLL_MISC(c) + PLL_BASE);
+	}
 }
 
 static int tegra20_pll_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 		unsigned long parent_rate)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
+	struct clk_tegra *p;
+	struct clk *p_c;
 	unsigned long input_rate = parent_rate;
 	const struct clk_pll_freq_table *sel;
+	struct clk_pll_freq_table cfg;
+	u32 p_div = 0;
+	u32 old_base = 0;
 	u32 val;
 
 	pr_debug("%s: %s %lu\n", __func__, __clk_get_name(hw->clk), rate);
@@ -774,39 +811,119 @@ static int tegra20_pll_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 
 	for (sel = c->u.pll.freq_table; sel->input_rate != 0; sel++) {
 		if (sel->input_rate == input_rate && sel->output_rate == rate) {
-			c->mul = sel->n;
-			c->div = sel->m * sel->p;
-
-			val = clk_readl(c->reg + PLL_BASE);
-			if (c->flags & PLL_FIXED)
-				val |= PLL_BASE_OVERRIDE;
-			val &= ~(PLL_BASE_DIVP_MASK | PLL_BASE_DIVN_MASK |
-				 PLL_BASE_DIVM_MASK);
-			val |= (sel->m << PLL_BASE_DIVM_SHIFT) |
-				(sel->n << PLL_BASE_DIVN_SHIFT);
-			BUG_ON(sel->p < 1 || sel->p > 2);
 			if (c->flags & PLLU) {
+				BUG_ON(sel->p < 1 || sel->p > 2);
 				if (sel->p == 1)
-					val |= PLLU_BASE_POST_DIV;
+					p_div = PLLU_BASE_POST_DIV;
 			} else {
-				if (sel->p == 2)
-					val |= 1 << PLL_BASE_DIVP_SHIFT;
+				BUG_ON(sel->p < 1);
+				for (val = sel->p;
+					val > 1; val >>= 1, p_div++)
+						;
+				p_div <<= PLL_BASE_DIVP_SHIFT;
 			}
-			clk_writel(val, c->reg + PLL_BASE);
-
-			if (c->flags & PLL_HAS_CPCON) {
-				val = clk_readl(c->reg + PLL_MISC(c));
-				val &= ~PLL_MISC_CPCON_MASK;
-				val |= sel->cpcon << PLL_MISC_CPCON_SHIFT;
-				clk_writel(val, c->reg + PLL_MISC(c));
-			}
-
-			if (c->state == ON)
-				tegra20_pll_clk_enable(hw);
-			return 0;
+			break;
 		}
 	}
-	return -EINVAL;
+
+	/*If required rate is not available in pll's frequency table, prepare
+	parameters manually */
+
+	if (sel->input_rate == 0) {
+		unsigned long cfreq;
+		BUG_ON(c->flags & PLLU);
+		sel = &cfg;
+
+		switch (input_rate) {
+		case 12000000:
+		case 26000000:
+			cfreq = (rate <= 1000000 * 1000) ? 1000000 : 2000000;
+			break;
+		case 13000000:
+			cfreq = (rate <= 1000000 * 1000) ? 1000000 : 2600000;
+			break;
+		case 16800000:
+		case 19200000:
+			cfreq = (rate <= 1200000 * 1000) ? 1200000 : 2400000;
+			break;
+		default:
+			p_c = __clk_get_parent(hw->clk);
+			p = to_clk_tegra( __clk_get_hw(p_c) );
+			if (p->flags & DIV_U71_FIXED) {
+				/* PLLP_OUT1 rate is not in PLLA table */
+				pr_warn("%s: failed %s ref/out rates %lu/%lu\n",
+					__func__, c->name, input_rate, rate);
+				cfreq = input_rate/(input_rate/1000000);
+				break;
+			}
+			pr_err("%s: Unexpected reference rate %lu\n",
+			       __func__, input_rate);
+			BUG();
+		}
+
+		/* Raise VCO to guarantee 0.5% accuracy */
+		for (cfg.output_rate = rate;
+			cfg.output_rate < 200 * cfreq;
+			cfg.output_rate <<= 1, p_div++)
+				;
+
+		cfg.p = 0x1 << p_div;
+		cfg.m = input_rate / cfreq;
+		cfg.n = cfg.output_rate / cfreq;
+		cfg.cpcon = 0x08; /* OUT_OF_TABLE_CPCON */
+
+		if ((cfg.m > (PLL_BASE_DIVM_MASK >> PLL_BASE_DIVM_SHIFT)) ||
+		    (cfg.n > (PLL_BASE_DIVN_MASK >> PLL_BASE_DIVN_SHIFT)) ||
+		    (p_div > (PLL_BASE_DIVP_MASK >> PLL_BASE_DIVP_SHIFT)) ||
+		    (cfg.output_rate > c->u.pll.vco_max)) {
+			pr_err("%s: Failed to set %s out-of-table rate %lu\n",
+			       __func__, c->name, rate);
+			return -EINVAL;
+		}
+		p_div <<= PLL_BASE_DIVP_SHIFT;
+	}
+
+	/*Setup multipliers and divisors, then setup rate*/
+
+	c->mul = sel->n;
+	c->div = sel->m * sel->p;
+
+	old_base = val = clk_readl(c->reg + PLL_BASE);
+	if (c->flags & PLL_FIXED)
+		val |= PLL_BASE_OVERRIDE;
+	val &= ~(PLL_BASE_DIVM_MASK | PLL_BASE_DIVN_MASK |
+		 ((c->flags & PLLU) ? PLLU_BASE_POST_DIV : PLL_BASE_DIVP_MASK));
+	val |= (sel->m << PLL_BASE_DIVM_SHIFT) |
+		(sel->n << PLL_BASE_DIVN_SHIFT) | p_div;
+	if (val == old_base)
+		return 0;
+
+	if (c->state == ON) {
+		tegra20_pll_clk_disable(hw);
+		val &= ~(PLL_BASE_BYPASS | PLL_BASE_ENABLE);
+	}
+	clk_writel(val, c->reg + PLL_BASE);
+
+	if (c->flags & PLL_HAS_CPCON) {
+		val = clk_readl(c->reg + PLL_MISC(c));
+		val &= ~PLL_MISC_CPCON_MASK;
+		val |= sel->cpcon << PLL_MISC_CPCON_SHIFT;
+		if (c->flags & (PLLU | PLLD)) {
+			val &= ~PLL_MISC_LFCON_MASK;
+			if (sel->n >= PLLDU_LFCON_SET_DIVN)
+				val |= 0x1 << PLL_MISC_LFCON_SHIFT;
+		} else if (c->flags & (PLLX | PLLM)) {
+			val &= ~(0x1 << PLL_MISC_DCCON_SHIFT);
+			if (rate >= (c->u.pll.vco_max >> 1))
+				val |= 0x1 << PLL_MISC_DCCON_SHIFT;
+		}
+		clk_writel(val, c->reg + PLL_MISC(c));
+	}
+
+	if (c->state == ON)
+		tegra20_pll_clk_enable(hw);
+
+	return 0;
 }
 
 static long tegra20_pll_clk_round_rate(struct clk_hw *hw, unsigned long rate,
@@ -821,6 +938,12 @@ static long tegra20_pll_clk_round_rate(struct clk_hw *hw, unsigned long rate,
 
 	if (c->flags & PLL_FIXED)
 		return c->u.pll.fixed_rate;
+
+	if (c->max_rate)
+		rate = min(c->max_rate, rate);
+
+	if (c->min_rate)
+		rate = max(c->min_rate, rate);
 
 	for (sel = c->u.pll.freq_table; sel->input_rate != 0; sel++)
 		if (sel->input_rate == input_rate && sel->output_rate == rate) {
@@ -943,8 +1066,6 @@ static int tegra20_pll_div_clk_enable(struct clk_hw *hw)
 	u32 new_val;
 	u32 val;
 
-	pr_debug("%s: %s\n", __func__, __clk_get_name(hw->clk));
-
 	if (c->flags & DIV_U71) {
 		spin_lock_irqsave(&clock_register_lock, flags);
 		val = clk_readl(c->reg);
@@ -976,8 +1097,6 @@ static void tegra20_pll_div_clk_disable(struct clk_hw *hw)
 	unsigned long flags;
 	u32 new_val;
 	u32 val;
-
-	pr_debug("%s: %s\n", __func__, __clk_get_name(hw->clk));
 
 	if (c->flags & DIV_U71) {
 		spin_lock_irqsave(&clock_register_lock, flags);
@@ -1049,6 +1168,10 @@ static long tegra20_pll_div_clk_round_rate(struct clk_hw *hw, unsigned long rate
 	pr_debug("%s: %s %lu\n", __func__, __clk_get_name(hw->clk), rate);
 
 	if (c->flags & DIV_U71) {
+		if (c->max_rate)
+			rate = min(c->max_rate, rate);
+		if (c->min_rate)
+			rate = max(c->min_rate, rate);
 		divider = clk_div71_get_divider(parent_rate, rate);
 		if (divider < 0)
 			return divider;
@@ -1131,6 +1254,7 @@ static void tegra20_periph_clk_disable(struct clk_hw *hw)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
 	unsigned long flags;
+	unsigned long val;
 
 	pr_debug("%s on clock %s\n", __func__, __clk_get_name(hw->clk));
 
@@ -1144,6 +1268,12 @@ static void tegra20_periph_clk_disable(struct clk_hw *hw)
 
 	spin_lock_irqsave(&clock_register_lock, flags);
 
+	/* If peripheral is in the APB bus then read the APB bus to
+	 * flush the write operation in apb bus. This will avoid the
+	 * peripheral access after disabling clock*/
+	if (c->flags & PERIPH_ON_APB)
+		val = chipid_readl();
+
 	clk_writel(PERIPH_CLK_TO_ENB_BIT(c),
 		CLK_OUT_ENB_CLR + PERIPH_CLK_TO_ENB_SET_REG(c));
 
@@ -1154,15 +1284,23 @@ void tegra2_periph_clk_reset(struct clk_hw *hw, bool assert)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
 	unsigned long base = assert ? RST_DEVICES_SET : RST_DEVICES_CLR;
+	unsigned long val;
 
 	pr_debug("%s %s on clock %s\n", __func__,
 		assert ? "assert" : "deassert", __clk_get_name(hw->clk));
 
 	BUG_ON(!c->u.periph.clk_num);
 
-	if (!(c->flags & PERIPH_NO_RESET))
+	if (!(c->flags & PERIPH_NO_RESET)) {
+		/* If peripheral is in the APB bus then read the APB bus to
+		 * flush the write operation in apb bus. This will avoid the
+		 * peripheral access after disabling clock*/
+		if (c->flags & PERIPH_ON_APB)
+			val = chipid_readl();
+
 		clk_writel(PERIPH_CLK_TO_ENB_BIT(c),
 			   base + PERIPH_CLK_TO_ENB_SET_REG(c));
+	}
 }
 
 static int tegra20_periph_clk_set_parent(struct clk_hw *hw, u8 index)
@@ -1290,7 +1428,11 @@ static long tegra20_periph_clk_round_rate(struct clk_hw *hw,
 	unsigned long parent_rate = __clk_get_rate(__clk_get_parent(hw->clk));
 	int divider;
 
-	pr_debug("%s: %s %lu\n", __func__, __clk_get_name(hw->clk), rate);
+	if (c->max_rate)
+		rate = min(c->max_rate, rate);
+
+	if (c->min_rate)
+		rate = max(c->min_rate, rate);
 
 	if (prate)
 		parent_rate = *prate;
