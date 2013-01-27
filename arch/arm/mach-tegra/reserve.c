@@ -50,16 +50,13 @@ static void __init ram_console_dt_resource_init(void)
 /*
  * Video
  */
+#define CARVEOUT_MEM_SIZE	SZ_256M
+
 static phys_addr_t tegra_carveout_mem;
 static phys_addr_t tegra_fb1_mem;
 static phys_addr_t tegra_fb2_mem;
 static phys_addr_t tegra_bootloader_fb_mem;
 static ulong tegra_bootloader_fb_size;
-
-phys_addr_t get_carveout_mem(void)
-{
-	return tegra_carveout_mem;
-}
 
 phys_addr_t get_fb1_mem(void)
 {
@@ -108,17 +105,116 @@ static void __init reserve_video_mem(void)
 	tegra_carveout_mem = memblock_end_of_DRAM() - CARVEOUT_MEM_SIZE;
 
 	if (memblock_remove(tegra_carveout_mem, CARVEOUT_MEM_SIZE))
-		tegra_carveout_mem = ~0ul;
+		tegra_carveout_mem = 0;
 
 	tegra_fb1_mem = memblock_end_of_DRAM() - FB1_MEM_SIZE;
 
 	if (memblock_remove(tegra_fb1_mem, FB1_MEM_SIZE))
-		tegra_fb1_mem = ~0ul;
+		tegra_fb1_mem = 0;
 
 	tegra_fb2_mem = memblock_end_of_DRAM() - FB2_MEM_SIZE;
 
 	if (memblock_remove(tegra_fb2_mem, FB2_MEM_SIZE))
-		tegra_fb2_mem = ~0ul;
+		tegra_fb2_mem = 0;
+}
+
+static const struct of_device_id nvmap_matches[] __initconst = {
+	{ .compatible = "nvidia,tegra-nvmap" },
+	{ }
+};
+
+/*
+ * Assign reserved mem to nvmap carveout
+ */
+static void __init nvmap_dt_resource_init(void)
+{
+	if (tegra_carveout_mem && of_have_populated_dt()) {
+		struct device_node *child, *np;
+
+		np = of_find_matching_node(NULL, nvmap_matches);
+		if (np) {
+			struct property *prop;
+
+			for_each_child_of_node(np, child) {
+				if (!of_find_property(child, "carveout", NULL))
+					continue;
+
+				prop = of_find_property(child, "reg", NULL);
+				if (prop) {
+					__be32 *reg = prop->value;
+
+					/* FIXME
+					 * assume first zero'd range
+					 * is generic carveout
+					 */
+					if (!(reg[0])) {
+						/* Override start; size */
+						reg[0] = cpu_to_be32(tegra_carveout_mem);
+						reg[1] = cpu_to_be32(CARVEOUT_MEM_SIZE);
+					}
+				}
+			}
+		}
+	}
+}
+
+static const struct of_device_id tegra_dc_matches[] __initconst = {
+	{ .compatible = "nvidia,tegra20-dc" },
+	{ }
+};
+
+/*
+ * TODO: eliminate reg override
+ * Assign fb mem to dc
+ */
+static void __init tegra_dc_dt_resource_init(void)
+{
+	struct device_node *np, *dc_node;
+	struct property *prop;
+	__be32 *reg;
+	u32 val;
+
+	if (tegra_fb1_mem) {
+		for_each_matching_node(dc_node, tegra_dc_matches) {
+			np = of_get_child_by_name(dc_node, "rgb");
+			if (!np || !of_device_is_available(np))
+				continue;
+
+			np = of_get_child_by_name(np, "display");
+			if (!np || of_property_read_u32(np, "type", &val) || val != 0)
+				continue;
+
+			of_property_for_each_u32(dc_node, "reg", prop, reg, val) {
+				if (!val) {
+					/* Override start; size */
+					reg[0] = cpu_to_be32(tegra_fb1_mem);
+					reg[1] = cpu_to_be32(FB1_MEM_SIZE);
+					continue;
+				}
+			}
+		}
+	}
+
+	if (tegra_fb2_mem) {
+		for_each_matching_node(dc_node, tegra_dc_matches) {
+			np = of_get_child_by_name(dc_node, "rgb");
+			if (!np || !of_device_is_available(np))
+				continue;
+
+			np = of_get_child_by_name(np, "display");
+			if (!np || of_property_read_u32(np, "type", &val) || val != 1)
+				continue;
+
+			of_property_for_each_u32(dc_node, "reg", prop, reg, val) {
+				if (!val) {
+					/* Override start; size */
+					reg[0] = cpu_to_be32(tegra_fb2_mem);
+					reg[1] = cpu_to_be32(FB2_MEM_SIZE);
+					return;
+				}
+			}
+		}
+	}
 }
 
 void __init tegra_reserve_common(void)
@@ -130,4 +226,6 @@ void __init tegra_reserve_common(void)
 void __init tegra_dt_reserved_init(void)
 {
 	ram_console_dt_resource_init();
+	nvmap_dt_resource_init();
+	tegra_dc_dt_resource_init();
 }

@@ -518,6 +518,12 @@ static int nvhost_resume(struct nvhost_device *dev)
 	return 0;
 }
 
+static struct of_device_id nvhost_of_match[] = {
+	{ .compatible = "nvidia,tegra20-host1x", },
+	{ .compatible = "nvidia,tegra30-host1x", },
+	{ },
+};
+
 static struct nvhost_driver nvhost_driver = {
 	.probe = nvhost_probe,
 	.remove = __exit_p(nvhost_remove),
@@ -525,7 +531,8 @@ static struct nvhost_driver nvhost_driver = {
 	.resume = nvhost_resume,
 	.driver = {
 		.owner = THIS_MODULE,
-		.name = DRIVER_NAME
+		.name = DRIVER_NAME,
+		.of_match_table = of_match_ptr(nvhost_of_match),
 	},
 	.finalize_poweron = power_on_host,
 	.prepare_poweroff = power_off_host,

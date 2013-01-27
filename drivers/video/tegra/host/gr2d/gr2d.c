@@ -46,6 +46,12 @@ static int gr2d_resume(struct nvhost_device *dev)
 }
 #endif
 
+static struct of_device_id gr2d_of_match[] = {
+	{ .compatible = "nvidia,tegra20-gr2d", },
+	{ .compatible = "nvidia,tegra30-gr2d", },
+	{ },
+};
+
 static struct nvhost_driver gr2d_driver = {
 	.probe = gr2d_probe,
 	.remove = __exit_p(gr2d_remove),
@@ -56,6 +62,7 @@ static struct nvhost_driver gr2d_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "gr2d",
+		.of_match_table = of_match_ptr(gr2d_of_match),
 	}
 };
 

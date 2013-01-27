@@ -25,6 +25,7 @@
 
 #include <linux/device.h>
 #include <linux/types.h>
+#include <linux/of_device.h>
 
 struct nvhost_master;
 
@@ -120,6 +121,8 @@ struct nvhost_device {
 	struct nvhost_channel *channel;	/* Channel assigned for the module */
 	struct kobject *power_kobj;	/* kobject to hold power sysfs entries */
 	struct nvhost_device_power_attr *power_attrib;	/* sysfs attributes */
+
+	bool is_dynamic;
 };
 
 struct nvhost_device_power_attr {
@@ -195,6 +198,7 @@ extern int nvhost_get_irq_byname(struct nvhost_device *, const char *);
 #define nvhost_set_drvdata(_dev, data)	dev_set_drvdata(&(_dev)->dev, (data))
 
 int nvhost_bus_add_host(struct nvhost_master *host);
+int nvhost_bus_init(void);
 
 static inline struct nvhost_device *nvhost_get_parent(struct nvhost_device *_dev)
 {
@@ -214,5 +218,37 @@ int nvhost_syncpt_wait_timeout_ext(struct nvhost_device *dev, u32 id, u32 thresh
 	u32 timeout, u32 *value);
 
 void nvhost_scale3d_set_throughput_hint(int hint);
+
+int of_nvhost_device_create(struct device_node *np, const char *bus_id,
+			    void *aux_dev);
+
+extern struct nvhost_device tegra_host1x01_t20_device;
+extern struct nvhost_device tegra_display01_t20_device;
+extern struct nvhost_device tegra_gr3d01_t20_device;
+extern struct nvhost_device tegra_gr2d01_t20_device;
+extern struct nvhost_device tegra_isp01_t20_device;
+extern struct nvhost_device tegra_vi01_t20_device;
+extern struct nvhost_device tegra_mpe01_t20_device;
+extern struct nvhost_device tegra_dsi01_t20_device;
+
+#define NVHOST_T20_OF_DEV_AUXDATA \
+	OF_DEV_AUXDATA("nvidia,tegra20-host1x", 0x50000000, "host1x", \
+		       &tegra_host1x01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-display", 0, "display", \
+		       &tegra_display01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-gr3d", 0x54180000, "gr3d", \
+		       &tegra_gr3d01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-gr2d", 0x54140000, "gr2d", \
+		       &tegra_gr2d01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-isp", 0x54100000, "isp", \
+		       &tegra_isp01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-vi", 0x54080000, "vi", \
+		       &tegra_vi01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-mpe", 0x54040000, "mpe", \
+		       &tegra_mpe01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-dsi", 0x54300000, "dsi", \
+		       &tegra_dsi01_t20_device), \
+	OF_DEV_AUXDATA("nvidia,tegra20-dc", 0x54200000, "tegradc.0", NULL), \
+	OF_DEV_AUXDATA("nvidia,tegra20-dc", 0x54240000, "tegradc.1", NULL) \
 
 #endif

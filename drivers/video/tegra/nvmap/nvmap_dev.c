@@ -36,6 +36,8 @@
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/nvmap.h>
+#include <linux/of_device.h>
+#include <linux/of_address.h>
 
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
@@ -1146,6 +1148,56 @@ static const struct file_operations debug_iovmm_allocations_fops = {
 	.release = single_release,
 };
 
+static struct nvmap_platform_data *nvmap_parse_dt(struct platform_device *pdev)
+{
+	struct nvmap_platform_data *pdata;
+	struct device_node *child, *np = pdev->dev.of_node;
+	struct nvmap_platform_carveout *carveout;
+	struct resource mem;
+	int i = 0;
+
+	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return NULL;
+
+	for_each_child_of_node(np, child) {
+		if (of_find_property(child, "carveout", NULL))
+			pdata->nr_carveouts++;
+	}
+
+	if (!pdata->nr_carveouts)
+		return NULL;
+
+	pdata->carveouts = devm_kzalloc(&pdev->dev,
+					sizeof(*carveout) * pdata->nr_carveouts,
+					GFP_KERNEL);
+	if (!pdata->carveouts)
+		return NULL;
+
+	for_each_child_of_node(np, child) {
+		if (of_find_property(child, "carveout", NULL)) {
+			if (of_address_to_resource(child, 0, &mem))
+				return NULL;
+
+			carveout = &pdata->carveouts[i++];
+
+			carveout->base = mem.start;
+			carveout->size = resource_size(&mem);
+			carveout->name = mem.name;
+
+			if (of_property_read_u32(child, "buddy-size",
+						 &carveout->buddy_size))
+				return NULL;
+
+			if (of_property_read_u32(child, "usage-mask",
+						 &carveout->usage_mask))
+				return NULL;
+		}
+	}
+
+	return pdata;
+}
+
 static int nvmap_probe(struct platform_device *pdev)
 {
 	struct nvmap_platform_data *plat = pdev->dev.platform_data;
@@ -1153,6 +1205,9 @@ static int nvmap_probe(struct platform_device *pdev)
 	struct dentry *nvmap_debug_root;
 	unsigned int i;
 	int e;
+
+	if (!plat && pdev->dev.of_node)
+		plat = nvmap_parse_dt(pdev);
 
 	if (!plat) {
 		dev_err(&pdev->dev, "no platform data?\n");
@@ -1402,6 +1457,11 @@ static int nvmap_resume(struct platform_device *pdev)
 	return 0;
 }
 
+static struct of_device_id nvmap_of_match[] = {
+	{ .compatible = "nvidia,tegra-nvmap", },
+	{ },
+};
+
 static struct platform_driver nvmap_driver = {
 	.probe		= nvmap_probe,
 	.remove		= nvmap_remove,
@@ -1411,6 +1471,7 @@ static struct platform_driver nvmap_driver = {
 	.driver = {
 		.name	= "tegra-nvmap",
 		.owner	= THIS_MODULE,
+		.of_match_table = of_match_ptr(nvmap_of_match),
 	},
 };
 

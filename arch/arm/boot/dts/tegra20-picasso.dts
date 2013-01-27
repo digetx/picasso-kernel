@@ -10,7 +10,33 @@
 		reg = <0x00000000 0x40000000>;
 	};
 
+	nvmap {
+		compatible = "nvidia,tegra-nvmap";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		carveout-iram {
+			carveout;
+			reg = <0x40000400 0x3FC00>;
+			reg-names = "iram";
+			buddy-size = <0>;
+			usage-mask = <0x20000000>;
+		};
+
+		carveout-generic {
+			carveout;
+			reg = <0x0 0x0>;
+			reg-names = "generic-0";
+			buddy-size = <0x8000>;
+			usage-mask = <0x1>;
+		};
+	};
+
 	host1x {
+		compatible = "nvidia,tegra20-host1x", "nvhost-bus";
+		ranges;
+
 		hdmi {
 			status = "okay";
 
@@ -19,6 +45,76 @@
 
 			nvidia,ddc-i2c-bus = <&hdmi_ddc>;
 			nvidia,hpd-gpio = <&gpio 111 0>; /* PN7 */
+		};
+
+		dc@54200000 {
+			reg = <0x54200000 0x00040000>,
+			      <0x0 0x0>;
+			reg-names = "regs", "fbmem";
+			interrupt-names = "irq";
+
+			rgb {
+				status = "okay";
+
+				display {
+					fb-win = <0>;
+					fb-xres = <1280>;
+					fb-yres = <800>;
+					fb-bpp = <32>;
+
+					dc-index = <0>;
+
+					flags = <1>; /* TEGRA_DC_FLAG_ENABLED */
+
+					type = <0>; /* TEGRA_DC_OUT_RGB */
+					order = <0>; /* TEGRA_DC_ORDER_RED_BLUE */
+					align = <0>; /* TEGRA_DC_ALIGN_MSB */
+					depth = <18>;
+					dither = <2>; /* TEGRA_DC_ORDERED_DITHER */
+
+					display-timings {
+						native-mode = <&timing0>;
+						timing0: 1280x800 {
+							clock-frequency = <70500000>;
+							hactive = <1280>;
+							vactive = <800>;
+							hfront-porch = <58>;
+							hback-porch = <4>;
+							hsync-len = <58>;
+							vsync-len = <4>;
+							vfront-porch = <58>;
+							vback-porch = <4>;
+						};
+					};
+				};
+			};
+		};
+
+		dc@54240000 {
+			reg = <0x54240000 0x00040000>,
+			      <0x54280000 0x00040000>,
+			      <0x0 0x0>;
+			reg-names = "regs", "hdmi_regs", "fbmem";
+			interrupt-names = "irq";
+
+			rgb {
+				status = "okay";
+
+				display {
+					fb-win = <0>;
+					fb-xres = <1280>;
+					fb-yres = <800>;
+					fb-bpp = <32>;
+
+					dc-index = <1>;
+
+					type = <1>; /* TEGRA_DC_OUT_HDMI */
+					order = <0>; /* TEGRA_DC_ORDER_RED_BLUE */
+					align = <0>; /* TEGRA_DC_ALIGN_MSB */
+					dc-flags = <0>; /* TEGRA_DC_OUT_HOTPLUG_HIGH */
+					max-clock = <148500>;
+				};
+			};
 		};
 	};
 
@@ -508,12 +604,14 @@
 					regulator-name = "vdd_ldo7,avdd_hdmi";
 					regulator-min-microvolt = <3300000>;
 					regulator-max-microvolt = <3300000>;
+					regulator-always-on;
 				};
 
 				hdmi_pll_reg: ldo8 {
 					regulator-name = "vdd_ldo8,avdd_hdmi_pll";
 					regulator-min-microvolt = <1800000>;
 					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
 				};
 
 				ldo9 {

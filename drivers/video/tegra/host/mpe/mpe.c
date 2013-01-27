@@ -652,6 +652,12 @@ static int mpe_resume(struct nvhost_device *dev)
 }
 #endif
 
+static struct of_device_id mpe_of_match[] = {
+	{ .compatible = "nvidia,tegra20-mpe", },
+	{ .compatible = "nvidia,tegra30-mpe", },
+	{ },
+};
+
 static struct nvhost_driver mpe_driver = {
 	.probe = mpe_probe,
 	.remove = __exit_p(mpe_remove),
@@ -662,6 +668,7 @@ static struct nvhost_driver mpe_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "mpe",
+		.of_match_table = of_match_ptr(mpe_of_match),
 	},
 	.id_table = mpe_id,
 };

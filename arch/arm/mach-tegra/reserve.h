@@ -1,7 +1,6 @@
 #ifndef __MACH_TEGRA_RESERVE_H
 #define __MACH_TEGRA_RESERVE_H
 
-#define CARVEOUT_MEM_SIZE		SZ_256M
 #define FB1_MEM_SIZE		SZ_8M + SZ_1M
 #define FB2_MEM_SIZE		SZ_16M
 

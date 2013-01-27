@@ -236,6 +236,12 @@ static int gr3d_resume(struct nvhost_device *dev)
 }
 #endif
 
+static struct of_device_id gr3d_of_match[] = {
+	{ .compatible = "nvidia,tegra20-gr3d", },
+	{ .compatible = "nvidia,tegra30-gr3d", },
+	{ },
+};
+
 static struct nvhost_driver gr3d_driver = {
 	.probe = gr3d_probe,
 	.remove = __exit_p(gr3d_remove),
@@ -246,6 +252,7 @@ static struct nvhost_driver gr3d_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "gr3d",
+		.of_match_table = of_match_ptr(gr3d_of_match),
 	},
 	.id_table = gr3d_id,
 };

@@ -227,28 +227,14 @@ static int process_wait_list(struct nvhost_intr *intr,
  * Sync point threshold interrupt service thread function
  * Handles sync point threshold triggers, in thread context
  */
-irqreturn_t nvhost_syncpt_thresh_fn(int irq, void *dev_id)
+void inline nvhost_syncpt_thresh_fn(struct nvhost_intr_syncpt *syncpt)
 {
-	struct nvhost_intr_syncpt *syncpt = dev_id;
 	unsigned int id = syncpt->id;
 	struct nvhost_intr *intr = intr_syncpt_to_intr(syncpt);
 	struct nvhost_master *dev = intr_to_dev(intr);
 
 	(void)process_wait_list(intr, syncpt,
 				nvhost_syncpt_update_min(&dev->syncpt, id));
-
-	return IRQ_HANDLED;
-}
-
-/**
- * free a syncpt's irq. syncpt interrupt should be disabled first.
- */
-static void free_syncpt_irq(struct nvhost_intr_syncpt *syncpt)
-{
-	if (syncpt->irq_requested) {
-		free_irq(syncpt->irq, syncpt);
-		syncpt->irq_requested = 0;
-	}
 }
 
 
@@ -265,7 +251,6 @@ int nvhost_intr_add_action(struct nvhost_intr *intr, u32 id, u32 thresh,
 	struct nvhost_waitlist *waiter = _waiter;
 	struct nvhost_intr_syncpt *syncpt;
 	int queue_was_empty;
-	int err;
 
 	BUG_ON(waiter == NULL);
 
@@ -286,23 +271,6 @@ int nvhost_intr_add_action(struct nvhost_intr *intr, u32 id, u32 thresh,
 	syncpt = intr->syncpt + id;
 
 	spin_lock(&syncpt->lock);
-
-	/* lazily request irq for this sync point */
-	if (!syncpt->irq_requested) {
-		spin_unlock(&syncpt->lock);
-
-		mutex_lock(&intr->mutex);
-		BUG_ON(!(intr_op().request_syncpt_irq));
-		err = intr_op().request_syncpt_irq(syncpt);
-		mutex_unlock(&intr->mutex);
-
-		if (err) {
-			kfree(waiter);
-			return err;
-		}
-
-		spin_lock(&syncpt->lock);
-	}
 
 	queue_was_empty = list_empty(&syncpt->wait_head);
 
@@ -356,7 +324,10 @@ int nvhost_intr_init(struct nvhost_intr *intr, u32 irq_gen, u32 irq_sync)
 	u32 nb_pts = nvhost_syncpt_nb_pts(&host->syncpt);
 
 	mutex_init(&intr->mutex);
-	intr->host_syncpt_irq_base = irq_sync;
+	intr->syncpt_irq = irq_sync;
+	intr->wq = create_workqueue("host_syncpt");
+	if (!intr->wq)
+		return -ENOMEM;
 	intr_op().init_host_sync(intr);
 	intr->host_general_irq = irq_gen;
 	intr->host_general_irq_requested = false;
@@ -367,8 +338,6 @@ int nvhost_intr_init(struct nvhost_intr *intr, u32 irq_gen, u32 irq_sync)
 	     ++id, ++syncpt) {
 		syncpt->intr = &host->intr;
 		syncpt->id = id;
-		syncpt->irq = irq_sync + id;
-		syncpt->irq_requested = 0;
 		spin_lock_init(&syncpt->lock);
 		INIT_LIST_HEAD(&syncpt->wait_head);
 		snprintf(syncpt->thresh_irq_name,
@@ -382,6 +351,7 @@ int nvhost_intr_init(struct nvhost_intr *intr, u32 irq_gen, u32 irq_sync)
 void nvhost_intr_deinit(struct nvhost_intr *intr)
 {
 	nvhost_intr_stop(intr);
+	destroy_workqueue(intr->wq);
 }
 
 void nvhost_intr_start(struct nvhost_intr *intr, u32 hz)
@@ -430,8 +400,6 @@ void nvhost_intr_stop(struct nvhost_intr *intr)
 			printk(KERN_DEBUG "%s id=%d\n", __func__, id);
 			BUG_ON(1);
 		}
-
-		free_syncpt_irq(syncpt);
 	}
 
 	intr_op().free_host_general_irq(intr);

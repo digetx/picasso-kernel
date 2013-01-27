@@ -5,9 +5,9 @@
 #include "edid.h"
 
 struct lcd_edid {
-    struct tegra_edid *edid;
-    struct fb_monspecs *specs;
-    int bus;
+	struct tegra_edid *edid;
+	struct fb_monspecs *specs;
+	int bus;
 } *lcdedid = NULL;
 
 int checkLCM(void)

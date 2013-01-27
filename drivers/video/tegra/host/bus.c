@@ -20,6 +20,8 @@
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/nvhost.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
 
 #include "bus.h"
 #include "dev.h"
@@ -91,6 +93,10 @@ static int nvhost_bus_match(struct device *_dev, struct device_driver *drv)
 {
 	struct nvhost_device *dev = to_nvhost_device(_dev);
 	struct nvhost_driver *ndrv = to_nvhost_driver(drv);
+
+	/* Attempt an OF style match first */
+	if (of_driver_match_device(_dev, drv))
+		return 1;
 
 	/* check if driver support multiple devices through id_table */
 	if (ndrv->id_table)
@@ -167,7 +173,9 @@ int nvhost_add_devices(struct nvhost_device **devs, int num)
 }
 EXPORT_SYMBOL_GPL(nvhost_add_devices);
 
-int nvhost_device_register(struct nvhost_device *dev)
+static int of_nvhost_device_register(struct nvhost_device *dev,
+				     const char *bus_id,
+				     struct device_node *node)
 {
 	int i, ret = 0;
 
@@ -181,11 +189,20 @@ int nvhost_device_register(struct nvhost_device *dev)
 		dev->dev.parent = &nvhost->dev->dev;
 
 	dev->dev.bus = &nvhost_bus_inst->nvhost_bus_type;
+	dev->dev.of_node = of_node_get(node);
 
-	if (dev->id != -1)
-		dev_set_name(&dev->dev, "%s.%d", dev->name,  dev->id);
-	else
-		dev_set_name(&dev->dev, "%s", dev->name);
+	if (node && !dev->name) {
+		if (bus_id)
+			dev_set_name(&dev->dev, "%s", bus_id);
+		else
+			of_device_make_bus_id(&dev->dev);
+		dev->name = dev_name(&dev->dev);
+	} else {
+		if (dev->id != -1)
+			dev_set_name(&dev->dev, "%s.%d", dev->name,  dev->id);
+		else
+			dev_set_name(&dev->dev, "%s", dev->name);
+	}
 
 	for (i = 0; i < dev->num_resources; i++) {
 		struct resource *p, *r = &dev->resource[i];
@@ -209,6 +226,13 @@ int nvhost_device_register(struct nvhost_device *dev)
 		}
 	}
 
+	if (dev->dev.of_node) {
+		dev->dev.id = -1;
+		
+		if (!dev->dev.parent)
+			set_dev_node(&dev->dev, of_node_to_nid(dev->dev.of_node));
+	}
+	
 	ret = device_add(&dev->dev);
 	if (ret == 0)
 		return ret;
@@ -224,7 +248,57 @@ failed:
 
 	return ret;
 }
+
+int nvhost_device_register(struct nvhost_device *dev)
+{
+	return of_nvhost_device_register(dev, NULL, NULL);
+}
 EXPORT_SYMBOL_GPL(nvhost_device_register);
+
+int of_nvhost_device_create(struct device_node *np, const char *bus_id,
+			    void *aux_dev)
+{
+	struct nvhost_device *dev;
+	int rc, i, num_reg = 0, num_irq;
+	struct resource *res, temp_res;
+
+	if (!of_device_is_available(np))
+		return -ENOMEM;
+
+	if (!nvhost_bus_inst && nvhost_bus_init())
+		return -ENOMEM;
+
+	if (!aux_dev) {
+		dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+		if (!dev)
+			return -ENOMEM;
+		dev->is_dynamic = true;
+	} else
+		dev = aux_dev;
+
+	/* count the io and irq resources */
+	if (of_can_translate_address(np))
+		while (of_address_to_resource(np, num_reg, &temp_res) == 0)
+			num_reg++;
+	num_irq = of_irq_count(np);
+
+	/* Populate the resource table */
+	if (num_irq || num_reg) {
+		res = kzalloc(sizeof(*res) * (num_irq + num_reg), GFP_KERNEL);
+		if (!res)
+			return -ENOMEM;
+
+		dev->num_resources = num_reg + num_irq;
+		dev->resource = res;
+		for (i = 0; i < num_reg; i++, res++) {
+			rc = of_address_to_resource(np, i, res);
+			WARN_ON(rc);
+		}
+		WARN_ON(of_irq_to_resource_table(np, res, num_irq) != num_irq);
+	}
+
+	return of_nvhost_device_register(dev, bus_id, np);
+}
 
 void nvhost_device_unregister(struct nvhost_device *dev)
 {
@@ -240,7 +314,14 @@ void nvhost_device_unregister(struct nvhost_device *dev)
 				release_resource(r);
 		}
 
+		if (dev->dev.of_node)
+			kfree(dev->resource);
+
+		of_node_put(dev->dev.of_node);
 		put_device(&dev->dev);
+
+		if (dev->is_dynamic)
+			kfree(dev);
 	}
 }
 EXPORT_SYMBOL_GPL(nvhost_device_unregister);
@@ -624,6 +705,12 @@ int nvhost_bus_init(void)
 
 	err = bus_register(&nvhost_bus_inst->nvhost_bus_type);
 
+	if (err) {
+		kfree(nvhost_bus_inst);
+		kfree(chip_ops);
+		nvhost_bus_inst = NULL;
+		chip_ops = NULL;
+	}
+
 	return err;
 }
-postcore_initcall(nvhost_bus_init);

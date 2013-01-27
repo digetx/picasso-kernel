@@ -32,10 +32,57 @@
 
 /*** HW host sync management ***/
 
+static void t20_intr_syncpt_thresh_isr(struct nvhost_intr_syncpt *syncpt);
+
+static void t20_syncpt_thresh_cascade_fn(struct work_struct *work)
+{
+	struct nvhost_intr_syncpt *sp =
+		container_of(work, struct nvhost_intr_syncpt, work);
+	nvhost_syncpt_thresh_fn(sp);
+}
+
+static irqreturn_t t20_syncpt_thresh_cascade_isr(int irq, void *dev_id)
+{
+	struct nvhost_intr *intr = dev_id;
+	struct nvhost_master *dev = intr_to_dev(intr);
+	void __iomem *sync_regs = dev->sync_aperture;
+	unsigned long reg;
+	int i, id;
+
+	for (i = 0; i < dev->info.nb_pts / BITS_PER_LONG; i++) {
+		reg = readl(sync_regs +
+			    host1x_sync_syncpt_thresh_cpu0_int_status_r() +
+			    i * REGISTER_STRIDE);
+		for_each_set_bit(id, &reg, BITS_PER_LONG) {
+			struct nvhost_intr_syncpt *sp =
+				intr->syncpt + (i * BITS_PER_LONG + id);
+			t20_intr_syncpt_thresh_isr(sp);
+			queue_work(intr->wq, &sp->work);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+
 static void t20_intr_init_host_sync(struct nvhost_intr *intr)
 {
 	struct nvhost_master *dev = intr_to_dev(intr);
 	void __iomem *sync_regs = dev->sync_aperture;
+	int i, err;
+
+	writel(0xffffffffUL,
+	       sync_regs + host1x_sync_syncpt_thresh_int_disable_r());
+	writel(0xffffffffUL,
+	       sync_regs + host1x_sync_syncpt_thresh_cpu0_int_status_r());
+
+	for (i = 0; i < dev->info.nb_pts; i++)
+		INIT_WORK(&intr->syncpt[i].work, t20_syncpt_thresh_cascade_fn);
+
+	err = devm_request_irq(&dev->dev->dev, intr->syncpt_irq,
+			       t20_syncpt_thresh_cascade_isr,
+			       IRQF_SHARED, "host1x_syncpt", intr);
+	WARN_ON(IS_ERR_VALUE(err));
+
 	/* disable the ip_busy_timeout. this prevents write drops, etc.
 	 * there's no real way to recover from a hung client anyway.
 	 */
@@ -110,9 +157,8 @@ static void t20_intr_disable_all_syncpt_intrs(struct nvhost_intr *intr)
  * Sync point threshold interrupt service function
  * Handles sync point threshold triggers, in interrupt context
  */
-static irqreturn_t t20_intr_syncpt_thresh_isr(int irq, void *dev_id)
+static void t20_intr_syncpt_thresh_isr(struct nvhost_intr_syncpt *syncpt)
 {
-	struct nvhost_intr_syncpt *syncpt = dev_id;
 	unsigned int id = syncpt->id;
 	struct nvhost_intr *intr = intr_syncpt_to_intr(syncpt);
 
@@ -124,8 +170,6 @@ static irqreturn_t t20_intr_syncpt_thresh_isr(int irq, void *dev_id)
 		host1x_sync_syncpt_thresh_int_disable_r() + reg);
 	writel(BIT_MASK(id), sync_regs +
 		host1x_sync_syncpt_thresh_cpu0_int_status_r() + reg);
-
-	return IRQ_WAKE_THREAD;
 }
 
 /**
@@ -208,23 +252,6 @@ static void t20_intr_free_host_general_irq(struct nvhost_intr *intr)
 	}
 }
 
-static int t20_request_syncpt_irq(struct nvhost_intr_syncpt *syncpt)
-{
-	int err;
-	if (syncpt->irq_requested)
-		return 0;
-
-	err = request_threaded_irq(syncpt->irq,
-				   t20_intr_syncpt_thresh_isr,
-				   nvhost_syncpt_thresh_fn,
-				   0, syncpt->thresh_irq_name, syncpt);
-	if (err)
-		return err;
-
-	syncpt->irq_requested = 1;
-	return 0;
-}
-
 static const struct nvhost_intr_ops host1x_intr_ops = {
 	.init_host_sync = t20_intr_init_host_sync,
 	.set_host_clocks_per_usec = t20_intr_set_host_clocks_per_usec,
@@ -234,5 +261,4 @@ static const struct nvhost_intr_ops host1x_intr_ops = {
 	.disable_all_syncpt_intrs = t20_intr_disable_all_syncpt_intrs,
 	.request_host_general_irq = t20_intr_request_host_general_irq,
 	.free_host_general_irq = t20_intr_free_host_general_irq,
-	.request_syncpt_irq = t20_request_syncpt_irq,
 };

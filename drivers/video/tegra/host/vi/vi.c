@@ -52,6 +52,12 @@ static int vi_resume(struct nvhost_device *dev)
 }
 #endif
 
+static struct of_device_id vi_of_match[] = {
+	{ .compatible = "nvidia,tegra20-vi", },
+	{ .compatible = "nvidia,tegra30-vi", },
+	{ },
+};
+
 static struct nvhost_driver vi_driver = {
 	.probe = vi_probe,
 	.remove = __exit_p(vi_remove),
@@ -62,6 +68,7 @@ static struct nvhost_driver vi_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "vi",
+		.of_match_table = of_match_ptr(vi_of_match),
 	}
 };
 

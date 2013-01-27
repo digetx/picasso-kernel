@@ -149,7 +149,7 @@ struct nvmap_platform_carveout {
 };
 
 struct nvmap_platform_data {
-	const struct nvmap_platform_carveout *carveouts;
+	struct nvmap_platform_carveout *carveouts;
 	unsigned int nr_carveouts;
 };
 

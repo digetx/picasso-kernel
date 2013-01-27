@@ -40,6 +40,12 @@
 #ifdef CONFIG_SWITCH
 #include <linux/switch.h>
 #endif
+#include <linux/of_gpio.h>
+#include <linux/of_i2c.h>
+#include <linux/of_address.h>
+#include <linux/of_display_timing.h>
+#include <linux/display_timing.h>
+#include <linux/videomode.h>
 
 #include <mach/clk.h>
 #include <mach/dc.h>
@@ -1729,6 +1735,137 @@ static ssize_t switch_modeset_print_mode(struct switch_dev *sdev, char *buf)
 }
 #endif
 
+static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *ndev)
+{
+	struct tegra_dc_platform_data *pdata;
+	struct tegra_dc_out *dc_out;
+	struct tegra_dc_mode *modes;
+	struct tegra_fb_data *fb_data;
+	struct display_timings *disp_timings;
+	struct device_node *np, *dc_np, *hdmi_np, *ddc;
+	struct i2c_adapter *ddc_i2c_adapter;
+	enum of_gpio_flags flags;
+	struct videomode vm;
+	int i, val, num_timings = 0;
+
+	dc_np = ndev->dev.of_node;
+
+	np = of_get_child_by_name(dc_np, "rgb");
+	if (!np || !of_device_is_available(np))
+		return NULL;
+
+	np = of_get_child_by_name(np, "display");
+	if (!np)
+		return NULL;
+
+	disp_timings = of_get_display_timings(np);
+	if (disp_timings)
+		num_timings = disp_timings->num_timings;
+
+	pdata = devm_kzalloc(&ndev->dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return NULL;
+
+	if (!of_property_read_u32(np, "flags", &val))
+		pdata->flags = val;
+
+	dc_out = devm_kzalloc(&ndev->dev, sizeof(*dc_out), GFP_KERNEL);
+	if (!dc_out)
+		return NULL;
+	pdata->default_out = dc_out;
+
+	/* set dc params */
+	if (!of_property_read_u32(np, "type", &val))
+		dc_out->type = val;
+
+	if (!of_property_read_u32(np, "order", &val))
+		dc_out->order = val;
+
+	if (!of_property_read_u32(np, "align", &val))
+		dc_out->align = val;
+
+	if (!of_property_read_u32(np, "depth", &val))
+		dc_out->depth = val;
+
+	if (!of_property_read_u32(np, "dither", &val))
+		dc_out->dither = val;
+
+	if (!of_property_read_u32(np, "max-clock", &val))
+		dc_out->max_pixclock = KHZ2PICOS(val);
+
+	if (!of_property_read_u32(np, "dc-flags", &val))
+		dc_out->flags = val;
+
+	if (dc_out->type == TEGRA_DC_OUT_HDMI) {
+		hdmi_np = of_get_child_by_name(of_get_parent(dc_np), "hdmi");
+		if (!hdmi_np || !of_device_is_available(hdmi_np))
+			return NULL;
+
+		ddc = of_parse_phandle(hdmi_np, "nvidia,ddc-i2c-bus", 0);
+		if (!ddc)
+			return NULL;
+
+		ddc_i2c_adapter = of_find_i2c_adapter_by_node(ddc);
+
+		of_node_put(ddc);
+
+		if (!ddc_i2c_adapter)
+			return NULL;
+
+		dc_out->dcc_bus = ddc_i2c_adapter->nr;
+
+		dc_out->hotplug_gpio = of_get_named_gpio_flags(hdmi_np,
+						       "nvidia,hpd-gpio", 0,
+						       &flags);
+	}
+
+	/* set video modes */
+	modes = devm_kzalloc(&ndev->dev, sizeof(*modes) * num_timings,
+			     GFP_KERNEL);
+	dc_out->modes = modes;
+
+	for (i = 0; i < num_timings; i++) {
+		if (!videomode_from_timing(disp_timings, &vm, i)) {
+			/* TODO: Convert to direct use of videomode */
+			modes[dc_out->n_modes].pclk          = vm.pixelclock,
+			modes[dc_out->n_modes].h_ref_to_sync = 0, // ?
+			modes[dc_out->n_modes].v_ref_to_sync = 0, // ?
+			modes[dc_out->n_modes].h_sync_width  = vm.hsync_len,
+			modes[dc_out->n_modes].v_sync_width  = vm.vsync_len,
+			modes[dc_out->n_modes].h_back_porch  = vm.hback_porch,
+			modes[dc_out->n_modes].v_back_porch  = vm.vback_porch,
+			modes[dc_out->n_modes].h_active      = vm.hactive,
+			modes[dc_out->n_modes].v_active      = vm.vactive,
+			modes[dc_out->n_modes].h_front_porch = vm.hfront_porch,
+			modes[dc_out->n_modes].v_front_porch = vm.vfront_porch,
+
+			dc_out->n_modes++;
+		}
+	}
+
+	fb_data = devm_kzalloc(&ndev->dev, sizeof(*fb_data), GFP_KERNEL);
+	if (!fb_data)
+		return NULL;
+	pdata->fb = fb_data;
+
+	if (!of_property_read_u32(np, "fb-win", &val))
+		fb_data->win = val;
+
+	if (!of_property_read_u32(np, "fb-xres", &val))
+		fb_data->xres = val;
+
+	if (!of_property_read_u32(np, "fb-yres", &val))
+		fb_data->yres = val;
+
+	if (!of_property_read_u32(np, "fb-bpp", &val))
+		fb_data->bits_per_pixel = val;
+
+	if (!of_property_read_u32(np, "dc-index", &val))
+		ndev->id = val;
+
+	return pdata;
+}
+
 static int tegra_dc_probe(struct nvhost_device *ndev,
 	struct nvhost_device_id *id_table)
 {
@@ -1743,6 +1880,9 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	void __iomem *base;
 	int irq;
 	int i;
+
+	if (!ndev->dev.platform_data && ndev->dev.of_node)
+		ndev->dev.platform_data = tegra_dc_parse_dt(ndev);
 
 	if (!ndev->dev.platform_data) {
 		dev_err(&ndev->dev, "no platform data\n");
@@ -1777,14 +1917,19 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 		goto err_free;
 	}
 
+	fb_mem = nvhost_get_resource_byname(ndev, IORESOURCE_MEM, "fbmem");
+	if (!fb_mem) {
+		dev_err(&ndev->dev, "no fb_mem resource\n");
+		ret = -ENOENT;
+		goto err_free;
+	}
+
 	base = ioremap(res->start, resource_size(res));
 	if (!base) {
 		dev_err(&ndev->dev, "registers can't be mapped\n");
 		ret = -EBUSY;
 		goto err_release_resource_reg;
 	}
-
-	fb_mem = nvhost_get_resource_byname(ndev, IORESOURCE_MEM, "fbmem");
 
 	clk = clk_get(&ndev->dev, NULL);
 	if (IS_ERR_OR_NULL(clk)) {
@@ -2092,10 +2237,17 @@ int suspend;
 
 module_param_call(suspend, suspend_set, suspend_get, &suspend, 0644);
 
+static struct of_device_id tegra_dc_of_match[] = {
+	{ .compatible = "nvidia,tegra20-dc", },
+	{ .compatible = "nvidia,tegra30-dc", },
+	{ },
+};
+
 struct nvhost_driver tegra_dc_driver = {
 	.driver = {
 		.name = "tegradc",
 		.owner = THIS_MODULE,
+		.of_match_table = of_match_ptr(tegra_dc_of_match),
 	},
 	.probe = tegra_dc_probe,
 	.remove = tegra_dc_remove,
@@ -2189,4 +2341,4 @@ static void __exit tegra_dc_module_exit(void)
 }
 
 module_exit(tegra_dc_module_exit);
-module_init(tegra_dc_module_init);
+late_initcall(tegra_dc_module_init);

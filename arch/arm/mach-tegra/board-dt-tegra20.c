@@ -33,6 +33,8 @@
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
 #include <linux/usb/tegra_usb_phy.h>
+#include <linux/nvhost.h>
+#include <linux/nvmap.h>
 
 #include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
@@ -103,12 +105,7 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-slink", 0x7000D600, "spi_tegra.1", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-slink", 0x7000D800, "spi_tegra.2", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-slink", 0x7000DA00, "spi_tegra.3", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-host1x", 0x50000000, "host1x", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-dc", 0x54200000, "tegradc.0", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-dc", 0x54240000, "tegradc.1", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-hdmi", 0x54280000, "hdmi", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-dsi", 0x54300000, "dsi", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-tvo", 0x542c0000, "tvo", NULL),
+	NVHOST_T20_OF_DEV_AUXDATA,
 	{}
 };
 
@@ -139,7 +136,6 @@ static __initdata struct tegra_clk_init_table tegra_dt_clk_init_table[] = {
 	{ NULL,		NULL,		0,		0},
 };
 
-extern void picasso_panel_init(void);
 static void __init tegra_dt_init(void)
 {
 	tegra_clk_init_from_table(tegra_dt_clk_init_table);
@@ -152,7 +148,6 @@ static void __init tegra_dt_init(void)
 	 */
 	of_platform_populate(NULL, of_default_bus_match_table,
 				tegra20_auxdata_lookup, NULL);
-	picasso_panel_init();
 }
 
 static void __init trimslice_init(void)

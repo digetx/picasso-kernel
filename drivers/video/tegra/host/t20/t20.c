@@ -19,6 +19,7 @@
  */
 
 #include <linux/nvhost_ioctl.h>
+#include <linux/of.h>
 #include "t20.h"
 #include "gr3d/gr3d_t20.h"
 #include "mpe/mpe.h"
@@ -43,24 +44,6 @@
 #define NVMODMUTEX_DSI		(9)
 
 static int t20_num_alloc_channels = 0;
-
-static struct resource tegra_host1x01_resources[] = {
-	{
-		.start = TEGRA_HOST1X_BASE,
-		.end = TEGRA_HOST1X_BASE + TEGRA_HOST1X_SIZE - 1,
-		.flags = IORESOURCE_MEM,
-	},
-	{
-		.start = INT_SYNCPT_THRESH_BASE,
-		.end = INT_SYNCPT_THRESH_BASE + INT_SYNCPT_THRESH_NR - 1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = INT_HOST1X_MPCORE_GENERAL,
-		.end = INT_HOST1X_MPCORE_GENERAL,
-		.flags = IORESOURCE_IRQ,
-	},
-};
 
 static const char *s_syncpt_names[32] = {
 	"gfx_host",
@@ -88,17 +71,15 @@ static struct host1x_device_info host1x01_info = {
 	.client_managed	= NVSYNCPTS_CLIENT_MANAGED,
 };
 
-static struct nvhost_device tegra_host1x01_device = {
+struct nvhost_device tegra_host1x01_t20_device = {
 	.dev		= {.platform_data = &host1x01_info},
 	.name		= "host1x",
 	.id		= -1,
-	.resource	= tegra_host1x01_resources,
-	.num_resources	= ARRAY_SIZE(tegra_host1x01_resources),
 	.clocks		= {{"host1x", UINT_MAX}, {} },
 	NVHOST_MODULE_NO_POWERGATE_IDS,
 };
 
-static struct nvhost_device tegra_display01_device = {
+struct nvhost_device tegra_display01_t20_device = {
 	.name		= "display",
 	.id		= -1,
 	.index		= 0,
@@ -112,7 +93,7 @@ static struct nvhost_device tegra_display01_device = {
 	.moduleid	= NVHOST_MODULE_NONE,
 };
 
-static struct nvhost_device tegra_gr3d01_device = {
+struct nvhost_device tegra_gr3d01_t20_device = {
 	.name		= "gr3d",
 	.version	= 1,
 	.id		= -1,
@@ -127,7 +108,7 @@ static struct nvhost_device tegra_gr3d01_device = {
 	.moduleid	= NVHOST_MODULE_NONE,
 };
 
-static struct nvhost_device tegra_gr2d01_device = {
+struct nvhost_device tegra_gr2d01_t20_device = {
 	.name		= "gr2d",
 	.id		= -1,
 	.index		= 2,
@@ -144,20 +125,9 @@ static struct nvhost_device tegra_gr2d01_device = {
 	.serialize	= true,
 };
 
-static struct resource isp_resources_t20[] = {
-	{
-		.name = "regs",
-		.start = TEGRA_ISP_BASE,
-		.end = TEGRA_ISP_BASE + TEGRA_ISP_SIZE - 1,
-		.flags = IORESOURCE_MEM,
-	}
-};
-
-static struct nvhost_device tegra_isp01_device = {
+struct nvhost_device tegra_isp01_t20_device = {
 	.name		= "isp",
 	.id		= -1,
-	.resource = isp_resources_t20,
-	.num_resources = ARRAY_SIZE(isp_resources_t20),
 	.index		= 3,
 	.syncpts	= 0,
 	NVHOST_MODULE_NO_POWERGATE_IDS,
@@ -165,19 +135,8 @@ static struct nvhost_device tegra_isp01_device = {
 	.moduleid	= NVHOST_MODULE_ISP,
 };
 
-static struct resource vi_resources[] = {
-	{
-		.name = "regs",
-		.start = TEGRA_VI_BASE,
-		.end = TEGRA_VI_BASE + TEGRA_VI_SIZE - 1,
-		.flags = IORESOURCE_MEM,
-	},
-};
-
-static struct nvhost_device tegra_vi01_device = {
+struct nvhost_device tegra_vi01_t20_device = {
 	.name		= "vi",
-	.resource = vi_resources,
-	.num_resources = ARRAY_SIZE(vi_resources),
 	.id		= -1,
 	.index		= 4,
 	.syncpts	= BIT(NVSYNCPT_CSI_VI_0) | BIT(NVSYNCPT_CSI_VI_1) |
@@ -191,21 +150,10 @@ static struct nvhost_device tegra_vi01_device = {
 	.moduleid	= NVHOST_MODULE_VI,
 };
 
-static struct resource tegra_mpe01_resources[] = {
-	{
-		.name = "regs",
-		.start = TEGRA_MPE_BASE,
-		.end = TEGRA_MPE_BASE + TEGRA_MPE_SIZE - 1,
-		.flags = IORESOURCE_MEM,
-	},
-};
-
-static struct nvhost_device tegra_mpe01_device = {
+struct nvhost_device tegra_mpe01_t20_device = {
 	.name		= "mpe",
 	.version	= 1,
 	.id		= -1,
-	.resource	= tegra_mpe01_resources,
-	.num_resources	= ARRAY_SIZE(tegra_mpe01_resources),
 	.index		= 5,
 	.syncpts	= BIT(NVSYNCPT_MPE) | BIT(NVSYNCPT_MPE_EBM_EOF) |
 			  BIT(NVSYNCPT_MPE_WR_SAFE),
@@ -220,7 +168,7 @@ static struct nvhost_device tegra_mpe01_device = {
 	.moduleid	= NVHOST_MODULE_MPE,
 };
 
-static struct nvhost_device tegra_dsi01_device = {
+struct nvhost_device tegra_dsi01_t20_device = {
 	.name		= "dsi",
 	.id		= -1,
 	.index		= 6,
@@ -232,14 +180,14 @@ static struct nvhost_device tegra_dsi01_device = {
 };
 
 static struct nvhost_device *t20_devices[] = {
-	&tegra_host1x01_device,
-	&tegra_display01_device,
-	&tegra_gr3d01_device,
-	&tegra_gr2d01_device,
-	&tegra_isp01_device,
-	&tegra_vi01_device,
-	&tegra_mpe01_device,
-	&tegra_dsi01_device,
+	&tegra_host1x01_t20_device,
+	&tegra_display01_t20_device,
+	&tegra_gr3d01_t20_device,
+	&tegra_gr2d01_t20_device,
+	&tegra_isp01_t20_device,
+	&tegra_vi01_t20_device,
+	&tegra_mpe01_t20_device,
+	&tegra_dsi01_t20_device,
 };
 
 int tegra2_register_host1x_devices(void)

@@ -52,6 +52,12 @@ static int isp_resume(struct nvhost_device *dev)
 }
 #endif
 
+static struct of_device_id isp_of_match[] = {
+	{ .compatible = "nvidia,tegra20-isp", },
+	{ .compatible = "nvidia,tegra30-isp", },
+	{ },
+};
+
 static struct nvhost_driver isp_driver = {
 	.probe = isp_probe,
 	.remove = __exit_p(isp_remove),
@@ -62,6 +68,7 @@ static struct nvhost_driver isp_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "isp",
+		.of_match_table = of_match_ptr(isp_of_match),
 	}
 };
 
