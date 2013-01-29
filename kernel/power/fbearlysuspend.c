@@ -16,6 +16,7 @@
 #include <linux/earlysuspend.h>
 #include <linux/module.h>
 #include <linux/wait.h>
+#include <linux/fb.h>
 
 #include "power.h"
 
@@ -54,6 +55,7 @@ static void start_drawing_late_resume(struct early_suspend *h)
 	spin_lock_irqsave(&fb_state_lock, irq_flags);
 	fb_state = FB_STATE_DRAWING_OK;
 	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
+
 	wake_up(&fb_state_wq);
 }
 
@@ -61,6 +63,30 @@ static struct early_suspend stop_drawing_early_suspend_desc = {
 	.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
 	.suspend = stop_drawing_early_suspend,
 	.resume = start_drawing_late_resume,
+};
+
+/* powerdown dc's */
+static void fb_disable_early_suspend(struct early_suspend *h)
+{
+	int i;
+
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_POWERDOWN);
+}
+
+/* enable dc's */
+static void fb_enable_late_resume(struct early_suspend *h)
+{
+	int i;
+
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_UNBLANK);
+}
+
+static struct early_suspend fb_early_suspend_desc = {
+	.level = EARLY_SUSPEND_LEVEL_DISABLE_FB,
+	.suspend = fb_disable_early_suspend,
+	.resume = fb_enable_late_resume,
 };
 
 static ssize_t wait_for_fb_sleep_show(struct kobject *kobj,
@@ -136,12 +162,14 @@ static int __init pm_fb_early_suspend_init(void)
 	}
 
 	register_early_suspend(&stop_drawing_early_suspend_desc);
+	register_early_suspend(&fb_early_suspend_desc);
 	return 0;
 }
 
 static void  __exit pm_fb_early_suspend_exit(void)
 {
 	unregister_early_suspend(&stop_drawing_early_suspend_desc);
+	unregister_early_suspend(&fb_early_suspend_desc);
 	sysfs_remove_group(power_kobj, &attr_group);
 }
 
