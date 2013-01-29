@@ -46,7 +46,6 @@
 #include "clock.h"
 #include "common.h"
 #include "iomap.h"
-#include "reserve.h"
 
 struct tegra_ehci_platform_data tegra_ehci1_pdata = {
 	.operating_mode = TEGRA_USB_OTG,
@@ -140,8 +139,6 @@ static void __init tegra_dt_init(void)
 {
 	tegra_clk_init_from_table(tegra_dt_clk_init_table);
 
-	tegra_dt_reserved_init();
-
 	/*
 	 * Finished with the static registrations now; fill in the missing
 	 * devices
@@ -218,7 +215,6 @@ static const char *tegra20_dt_board_compat[] = {
 
 DT_MACHINE_START(TEGRA_DT, "nVidia Tegra20 FDT")
 	.map_io		= tegra_map_common_io,
-	.reserve	= tegra_reserve_common,
 	.smp		= smp_ops(tegra_smp_ops),
 	.init_early	= tegra20_init_early,
 	.init_irq	= tegra_dt_init_irq,

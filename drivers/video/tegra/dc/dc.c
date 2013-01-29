@@ -1353,12 +1353,69 @@ static int tegra_dc_init(struct tegra_dc *dc)
 	return 0;
 }
 
+static int tegra_dc_panel_enable_common(struct tegra_dc *dc)
+{
+	switch (dc->out->type) {
+		case TEGRA_DC_OUT_RGB:
+			if (!IS_ERR_OR_NULL(dc->out->pnl_vdd))
+				regulator_enable(dc->out->pnl_vdd);
+			if (!IS_ERR_OR_NULL(dc->out->lvds_vdd))
+				regulator_enable(dc->out->lvds_vdd);
+
+			mdelay(dc->out->lvds_to_bl_timeout);
+
+			if (!IS_ERR_OR_NULL(dc->out->bl_vdd))
+				regulator_enable(dc->out->bl_vdd);
+			break;
+		case TEGRA_DC_OUT_HDMI:
+			if (!IS_ERR_OR_NULL(dc->out->hdmi_vdd))
+				regulator_enable(dc->out->hdmi_vdd);
+			if (!IS_ERR_OR_NULL(dc->out->hdmi_pll))
+				regulator_enable(dc->out->hdmi_pll);
+			break;
+		case TEGRA_DC_OUT_DSI:
+			break;
+		default:
+			dev_err(&dc->ndev->dev, "wrong dc type\n");
+	};
+
+	return 0;
+}
+
+static int tegra_dc_panel_disable_common(struct tegra_dc *dc)
+{
+	switch (dc->out->type) {
+		case TEGRA_DC_OUT_RGB:
+			if (!IS_ERR_OR_NULL(dc->out->bl_vdd))
+				regulator_disable(dc->out->bl_vdd);
+			if (!IS_ERR_OR_NULL(dc->out->lvds_vdd))
+				regulator_disable(dc->out->lvds_vdd);
+			if (!IS_ERR_OR_NULL(dc->out->pnl_vdd))
+				regulator_disable(dc->out->pnl_vdd);
+			break;
+		case TEGRA_DC_OUT_HDMI:
+			if (!IS_ERR_OR_NULL(dc->out->hdmi_vdd))
+				regulator_disable(dc->out->hdmi_vdd);
+			if (!IS_ERR_OR_NULL(dc->out->hdmi_pll))
+				regulator_disable(dc->out->hdmi_pll);
+			break;
+		case TEGRA_DC_OUT_DSI:
+			break;
+		default:
+			dev_err(&dc->ndev->dev, "wrong dc type\n");
+	};
+
+	return 0;
+}
+
 static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 {
 	int failed_init = 0;
 
 	if (dc->out->enable)
 		dc->out->enable();
+	else
+		tegra_dc_panel_enable_common(dc);
 
 	tegra_dc_setup_clk(dc, dc->clk);
 	tegra_dc_clk_enable(dc);
@@ -1376,11 +1433,15 @@ static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 		tegra_dc_clk_disable(dc);
 		if (dc->out && dc->out->disable)
 			dc->out->disable();
+		else
+			tegra_dc_panel_disable_common(dc);
 		return false;
 	}
 
 	if (dc->out_ops && dc->out_ops->enable)
 		dc->out_ops->enable(dc);
+	else
+		tegra_dc_panel_enable_common(dc);
 
 	/* force a full blending update */
 	dc->blend.z[0] = -1;
@@ -1405,6 +1466,8 @@ static bool _tegra_dc_controller_reset_enable(struct tegra_dc *dc)
 
 	if (dc->out->enable)
 		dc->out->enable();
+	else
+		tegra_dc_panel_enable_common(dc);
 
 	tegra_dc_setup_clk(dc, dc->clk);
 	tegra_dc_clk_enable(dc);
@@ -1440,6 +1503,8 @@ static bool _tegra_dc_controller_reset_enable(struct tegra_dc *dc)
 
 	if (dc->out_ops && dc->out_ops->enable)
 		dc->out_ops->enable(dc);
+	else
+		tegra_dc_panel_enable_common(dc);
 
 	if (dc->out->postpoweron)
 		dc->out->postpoweron();
@@ -1524,6 +1589,8 @@ static void _tegra_dc_controller_disable(struct tegra_dc *dc)
 
 	if (dc->out_ops && dc->out_ops->disable)
 		dc->out_ops->disable(dc);
+	else
+		tegra_dc_panel_disable_common(dc);
 
 	tegra_dc_writel(dc, 0, DC_CMD_INT_MASK);
 	tegra_dc_writel(dc, 0, DC_CMD_INT_ENABLE);
@@ -1534,6 +1601,8 @@ static void _tegra_dc_controller_disable(struct tegra_dc *dc)
 
 	if (dc->out && dc->out->disable)
 		dc->out->disable();
+	else
+		tegra_dc_panel_disable_common(dc);
 
 	for (i = 0; i < dc->n_windows; i++) {
 		struct tegra_dc_win *w = &dc->windows[i];
@@ -1796,6 +1865,15 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 	if (!of_property_read_u32(np, "dc-flags", &val))
 		dc_out->flags = val;
 
+	if (!of_property_read_u32(np, "lvds-to-bl", &val))
+		dc_out->lvds_to_bl_timeout = val;
+
+	dc_out->lvds_vdd = devm_regulator_get(&ndev->dev, "lvds-vdd");
+	dc_out->pnl_vdd = devm_regulator_get(&ndev->dev, "pnl-vdd");
+	dc_out->bl_vdd = devm_regulator_get(&ndev->dev, "bl-vdd");
+	dc_out->hdmi_vdd = devm_regulator_get(&ndev->dev, "hdmi-vdd");
+	dc_out->hdmi_pll = devm_regulator_get(&ndev->dev, "hdmi-pll");
+
 	if (dc_out->type == TEGRA_DC_OUT_HDMI) {
 		hdmi_np = of_get_child_by_name(of_get_parent(dc_np), "hdmi");
 		if (!hdmi_np || !of_device_is_available(hdmi_np))
@@ -1815,8 +1893,8 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 		dc_out->dcc_bus = ddc_i2c_adapter->nr;
 
 		dc_out->hotplug_gpio = of_get_named_gpio_flags(hdmi_np,
-						       "nvidia,hpd-gpio", 0,
-						       &flags);
+							"nvidia,hpd-gpio", 0,
+							&flags);
 	}
 
 	/* set video modes */

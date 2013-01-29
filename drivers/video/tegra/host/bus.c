@@ -138,6 +138,9 @@ static void nvhost_drv_shutdown(struct device *_dev)
 
 int nvhost_driver_register(struct nvhost_driver *drv)
 {
+	if (!nvhost_bus_inst)
+		return -ENODEV;
+
 	drv->driver.bus = &nvhost_bus_inst->nvhost_bus_type;
 	if (drv->probe)
 		drv->driver.probe = nvhost_drv_probe;
@@ -263,10 +266,10 @@ int of_nvhost_device_create(struct device_node *np, const char *bus_id,
 	struct resource *res, temp_res;
 
 	if (!of_device_is_available(np))
-		return -ENOMEM;
+		return -ENODEV;
 
 	if (!nvhost_bus_inst && nvhost_bus_init())
-		return -ENOMEM;
+		return -ENODEV;
 
 	if (!aux_dev) {
 		dev = kzalloc(sizeof(*dev), GFP_KERNEL);

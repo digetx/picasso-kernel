@@ -25,6 +25,7 @@
 #include <linux/pm.h>
 #include <linux/types.h>
 #include <linux/fb.h>
+#include <linux/regulator/consumer.h>
 #include <drm/drm_fixed.h>
 
 #define TEGRA_MAX_DC		2
@@ -371,6 +372,14 @@ struct tegra_dc_out {
 	unsigned		n_out_sel_configs;
 	bool			user_needs_vblank;
 	struct completion	user_vblank_comp;
+
+	struct regulator	*hdmi_vdd;
+	struct regulator	*hdmi_pll;
+
+	struct regulator	*lvds_vdd;
+	struct regulator	*pnl_vdd;
+	struct regulator	*bl_vdd;
+	unsigned		lvds_to_bl_timeout;
 
 	int	(*enable)(void);
 	int	(*postpoweron)(void);

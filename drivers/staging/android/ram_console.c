@@ -22,6 +22,7 @@
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include <linux/of_device.h>
+#include <linux/memblock.h>
 
 #include "ram_console.h"
 
@@ -380,6 +381,9 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 	start = res->start;
 	printk(KERN_INFO "ram_console: got buffer at %zx, size %zx\n",
 	       start, buffer_size);
+
+	memblock_remove(res->start, buffer_size);
+
 	buffer = ioremap(res->start, buffer_size);
 	if (buffer == NULL) {
 		printk(KERN_ERR "ram_console: failed to map memory\n");

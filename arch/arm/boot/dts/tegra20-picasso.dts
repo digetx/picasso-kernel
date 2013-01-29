@@ -1,5 +1,14 @@
 /dts-v1/;
 
+/*
+ * Carveouts for multimedia and ram console
+ * 256MB - multimedia
+ * 9MB - fb1
+ * 16MB - fb2
+ * 1MB - console
+ */
+/memreserve/ 0x2E600000 0x11A00000;
+
 /include/ "tegra20.dtsi"
 
 / {
@@ -16,20 +25,24 @@
 		#size-cells = <1>;
 		ranges;
 
-		carveout-iram {
-			carveout;
-			reg = <0x40000400 0x3FC00>;
-			reg-names = "iram";
-			buddy-size = <0>;
-			usage-mask = <0x20000000>;
-		};
+		carveouts {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
 
-		carveout-generic {
-			carveout;
-			reg = <0x0 0x0>;
-			reg-names = "generic-0";
-			buddy-size = <0x8000>;
-			usage-mask = <0x1>;
+			iram {
+				reg = <0x40000400 0x3FC00>;
+				reg-names = "iram";
+				buddy-size = <0>;
+				usage-mask = <0x20000000>;
+			};
+
+			generic {
+				reg = <0x2E600000 0x10000000>;
+				reg-names = "generic-0";
+				buddy-size = <0x8000>;
+				usage-mask = <0x1>;
+			};
 		};
 	};
 
@@ -49,9 +62,13 @@
 
 		dc@54200000 {
 			reg = <0x54200000 0x00040000>,
-			      <0x0 0x0>;
+			      <0x3E600000 0x00900000>;
 			reg-names = "regs", "fbmem";
 			interrupt-names = "irq";
+
+			lvds-vdd-supply = <&lvds_bl_reg>;
+			pnl-vdd-supply = <&vdd_pnl_reg>;
+			bl-vdd-supply = <&vdd_bl_reg>;
 
 			rgb {
 				status = "okay";
@@ -61,6 +78,8 @@
 					fb-xres = <1280>;
 					fb-yres = <800>;
 					fb-bpp = <32>;
+
+					lvds-to-bl = <330>;
 
 					dc-index = <0>;
 
@@ -93,9 +112,12 @@
 		dc@54240000 {
 			reg = <0x54240000 0x00040000>,
 			      <0x54280000 0x00040000>,
-			      <0x0 0x0>;
+			      <0x3EF00000 0x01000000>;
 			reg-names = "regs", "hdmi_regs", "fbmem";
 			interrupt-names = "irq";
+
+			hdmi-vdd-supply = <&hdmi_vdd_reg>;
+			hdmi-pll-supply = <&hdmi_pll_reg>;
 
 			rgb {
 				status = "okay";
@@ -486,26 +508,34 @@
 			regulator-always-on;
 		};
 
-		regulator@1 {
-			compatible = "regulator-gpio";
+		vdd_pnl_reg: regulator@1 {
+			compatible = "regulator-fixed";
 			reg = <1>;
 			regulator-name = "vdd_pnl";
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <2800000>;
 			gpio = <&gpio 22 0>; /* gpio PC6 */
 			enable-active-high;
-			enable-at-boot;
 		};
 
-		regulator@2 {
-			compatible = "regulator-gpio";
+		vdd_bl_reg: regulator@2 {
+			compatible = "regulator-fixed";
 			reg = <2>;
 			regulator-name = "vdd_bl";
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <2800000>;
 			gpio = <&gpio 28 0>; /* gpio PD4 */
 			enable-active-high;
-			enable-at-boot;
+		};
+
+		lvds_bl_reg: regulator@3 {
+			compatible = "regulator-fixed";
+			reg = <3>;
+			regulator-name = "vdd_lvds";
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			gpio = <&gpio 10 0>; /* gpio PB2 */
+			enable-active-high;
 		};
 	};
 
@@ -604,14 +634,12 @@
 					regulator-name = "vdd_ldo7,avdd_hdmi";
 					regulator-min-microvolt = <3300000>;
 					regulator-max-microvolt = <3300000>;
-					regulator-always-on;
 				};
 
 				hdmi_pll_reg: ldo8 {
 					regulator-name = "vdd_ldo8,avdd_hdmi_pll";
 					regulator-min-microvolt = <1800000>;
 					regulator-max-microvolt = <1800000>;
-					regulator-always-on;
 				};
 
 				ldo9 {
@@ -662,7 +690,7 @@
 
 	ram-console {
 		compatible = "android,ram-console";
-		reg = <0x0 0x0>;
+		reg = <0x3FF00000 0x00100000>;
 	};
 
 	backlight {

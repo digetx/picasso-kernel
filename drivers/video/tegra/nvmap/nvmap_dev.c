@@ -36,6 +36,7 @@
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/nvmap.h>
+#include <linux/memblock.h>
 #include <linux/of_device.h>
 #include <linux/of_address.h>
 
@@ -1154,16 +1155,18 @@ static struct nvmap_platform_data *nvmap_parse_dt(struct platform_device *pdev)
 	struct device_node *child, *np = pdev->dev.of_node;
 	struct nvmap_platform_carveout *carveout;
 	struct resource mem;
-	int i = 0;
+	int i = 0, val;
 
 	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return NULL;
 
-	for_each_child_of_node(np, child) {
-		if (of_find_property(child, "carveout", NULL))
-			pdata->nr_carveouts++;
-	}
+
+	np = of_get_child_by_name(np, "carveouts");
+	if (!np)
+		return NULL;
+
+	pdata->nr_carveouts = of_get_child_count(np);
 
 	if (!pdata->nr_carveouts)
 		return NULL;
@@ -1175,9 +1178,8 @@ static struct nvmap_platform_data *nvmap_parse_dt(struct platform_device *pdev)
 		return NULL;
 
 	for_each_child_of_node(np, child) {
-		if (of_find_property(child, "carveout", NULL)) {
 			if (of_address_to_resource(child, 0, &mem))
-				return NULL;
+				continue;
 
 			carveout = &pdata->carveouts[i++];
 
@@ -1185,14 +1187,13 @@ static struct nvmap_platform_data *nvmap_parse_dt(struct platform_device *pdev)
 			carveout->size = resource_size(&mem);
 			carveout->name = mem.name;
 
-			if (of_property_read_u32(child, "buddy-size",
-						 &carveout->buddy_size))
-				return NULL;
+			memblock_remove(carveout->base, carveout->size);
 
-			if (of_property_read_u32(child, "usage-mask",
-						 &carveout->usage_mask))
-				return NULL;
-		}
+			if (!of_property_read_u32(child, "buddy-size", &val))
+				carveout->buddy_size = val;
+
+			if (!of_property_read_u32(child, "usage-mask", &val))
+				carveout->usage_mask = val;
 	}
 
 	return pdata;

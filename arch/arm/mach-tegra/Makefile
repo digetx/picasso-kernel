@@ -9,7 +9,6 @@ obj-y					+= flowctrl.o
 obj-y					+= powergate.o
 obj-y					+= apbio.o
 obj-y					+= pm.o
-obj-y					+= reserve.o
 obj-y                                   += mc.o
 obj-y                                   += csi.o
 obj-y                                   += kfuse.o
