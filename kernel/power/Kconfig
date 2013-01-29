@@ -20,11 +20,11 @@ config SUSPEND_FREEZER
 
 config HAS_WAKELOCK
 	bool
-	default n
+	default y
 
 config WAKELOCK
 	bool
-	default n
+	default y
 
 config HIBERNATE_CALLBACKS
 	bool
