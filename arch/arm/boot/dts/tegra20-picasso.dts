@@ -700,4 +700,37 @@
 		brightness-levels = <0 4 8 16 32 64 128 255>;
 		default-brightness-level = <6>;
 	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		power {
+			label = "Power key";
+			gpios = <&gpio 67 0>; /* gpio PI3 */
+			linux,code = <116>; /* KEY_POWER */
+			debounce-interval = <0>;
+		};
+
+		wakeup {
+			label = "Wakeup key";
+			gpios = <&gpio 23 0>; /* gpio PC7 */
+			linux,code = <116>; /* KEY_POWER */
+			gpio-key,wakeup;
+			debounce-interval = <0>;
+		};
+
+		volume-up {
+			label = "Volume-up key";
+			gpios = <&gpio 132 1>; /* gpio PQ4 */
+			linux,code = <115>; /* KEY_VOLUMEUP */
+			debounce-interval = <10>;
+		};
+
+		volume-down {
+			label = "Volume-down key";
+			gpios = <&gpio 133 1>; /* gpio PQ5 */
+			linux,code = <114>; /* KEY_VOLUMEDOWN */
+			debounce-interval = <10>;
+		};
+	};
 };
