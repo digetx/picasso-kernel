@@ -11,4 +11,3 @@ obj-y += dc_sysfs.o
 obj-y += dc_config.o
 obj-$(CONFIG_TEGRA_OVERLAY) += overlay.o
 obj-$(CONFIG_TEGRA_DC_EXTENSIONS) += ext/
-obj-y += lcd_edid.o

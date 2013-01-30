@@ -21,13 +21,6 @@
 // #include <media/yuv5_sensor.h>
 // #include <media/lsc_from_ec.h>
 
-/*
- * defined in
- * drivers/video/tegra/dc/lcd_edid.c
- * TODO: remove this and other extern's
- */
-// extern int checkLCM(void);
-
 // struct sensor_reg_copy EC_D65_patch_ram_table[LSC_LINE + 1];
 // struct sensor_reg_copy EC_CWF_patch_ram_table[LSC_LINE + 1];
 int lsc_from_ec_status = 0;
@@ -577,6 +570,55 @@ static ssize_t status_gps_store(struct device *dev,
 	return n;
 }
 
+#define CABC_MASK	BIT(8)
+static void ec_set_lcd_cabc(struct i2c_client *client, bool enable)
+{
+	s32 ret;
+
+	ret = ec_read_word_data(client, MISC_CTRL_RD);
+	if (ret < 0)
+		return;
+
+	if (enable)
+		ret |= CABC_MASK;
+	else
+		ret &= (~CABC_MASK);
+
+	ec_write_word_data(client, MISC_CTRL_WR, ret);
+}
+
+static ssize_t cabc_show(struct device *dev,
+			 struct device_attribute *attr,
+			 char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	bool enabled;
+
+	enabled = ec_read_word_data(client, MISC_CTRL_RD) & CABC_MASK;
+
+	return sprintf(buf, "%d\n", enabled);
+}
+
+static ssize_t cabc_store(struct device *dev,
+			  struct device_attribute *attr,
+			  const char * buf, size_t n)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	s32 ret;
+	int val;
+
+	ret = kstrtoint(buf, 10, &val);
+	if (ret < 0) {
+		dev_err(dev,
+			"%s: failed to convert str: %s\n", __func__, buf);
+		return n;
+	}
+
+	ec_set_lcd_cabc(client, !!val);
+
+	return n;
+}
+
 static DEVICE_ATTR(GyroGain, 0666, gyro_show, gyro_store);
 static DEVICE_ATTR(PowerLED, 0222, NULL, pwr_led_on_store);
 static DEVICE_ATTR(ChargeLED, 0222, NULL, chrg_led_on_store);
@@ -589,6 +631,7 @@ static DEVICE_ATTR(WIFIMAC, 0666, wifimac_show, wifimac_store);
 static DEVICE_ATTR(DeviceStatus, 0666, device_status_show, device_status_store);
 static DEVICE_ATTR(ThreeGPower, 0666, status_3g_show, status_3g_store);
 static DEVICE_ATTR(GPSPower, 0666, status_gps_show, status_gps_store);
+static DEVICE_ATTR(Cabc, 0666, cabc_show, cabc_store);
 
 static struct attribute *ec_control_attrs[] = {
 	&dev_attr_GyroGain.attr,
@@ -603,6 +646,7 @@ static struct attribute *ec_control_attrs[] = {
 	&dev_attr_DeviceStatus.attr,
 	&dev_attr_ThreeGPower.attr,
 	&dev_attr_GPSPower.attr,
+	&dev_attr_Cabc.attr,
 	NULL,
 };
 
@@ -637,20 +681,6 @@ static void ec_pwr_led_change_state(struct led_classdev *led_cdev,
 
 	led->new_state = value;
 	schedule_work(&led->work);
-}
-
-#define CABC_MASK	BIT(8)
-static void ec_enable_lcd_cabc(struct i2c_client *client)
-{
-	s32 ret;
-
-	ret = ec_read_word_data(client, MISC_CTRL_RD);
-	if (ret < 0)
-		return;
-
-	ret |= CABC_MASK;
-
-	ec_write_word_data(client, MISC_CTRL_WR, ret);
 }
 
 #define RAM_BANK	0x0001
@@ -1284,10 +1314,8 @@ static int ec_probe(struct i2c_client *client,
 
 	/*
 	 * enable content adaptive backlight control
-	 * if needed
 	 */
-// 	if (checkLCM())
-// 		ec_enable_lcd_cabc(client);
+	ec_set_lcd_cabc(client, true);
 
 	/* set pm functions */
 	pm_power_off   = ec_poweroff;
