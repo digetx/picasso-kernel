@@ -26,11 +26,11 @@
 
 #include <video/tegra_dc_ext.h>
 
-#include <mach/dc.h>
 #include <linux/nvmap.h>
-#include <mach/tegra_dc_ext.h>
 
 /* XXX ew */
+#include "tegra_dc_ext.h"
+#include "../dc.h"
 #include "../dc_priv.h"
 #include "../dc_config.h"
 /* XXX ew 2 */

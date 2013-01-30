@@ -35,13 +35,12 @@
 
 #include <video/tegrafb.h>
 
-#include <mach/dc.h>
-#include <mach/fb.h>
 #include <linux/nvhost.h>
 #include <linux/nvmap.h>
 #include <linux/console.h>
 
-
+#include "dc/dc.h"
+#include "dc/fb.h"
 #include "host/dev.h"
 #include "nvmap/nvmap.h"
 #include "dc/dc_priv.h"

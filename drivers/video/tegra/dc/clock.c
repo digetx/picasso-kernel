@@ -21,8 +21,8 @@
 #include <linux/clk.h>
 
 #include <mach/clk.h>
-#include <mach/dc.h>
 
+#include "dc.h"
 #include "dc_reg.h"
 #include "dc_priv.h"
 

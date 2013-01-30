@@ -36,13 +36,13 @@
 #include <linux/module.h>
 
 #include <mach/clk.h>
-#include <mach/dc.h>
-#include <mach/fb.h>
 #include <linux/nvhost.h>
 #include <mach/hdmi-audio.h>
 
 #include <video/tegrafb.h>
 
+#include "dc.h"
+#include "fb.h"
 #include "dc_reg.h"
 #include "dc_priv.h"
 #include "hdmi_reg.h"

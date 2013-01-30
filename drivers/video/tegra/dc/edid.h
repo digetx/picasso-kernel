@@ -20,7 +20,8 @@
 
 #include <linux/i2c.h>
 #include <linux/wait.h>
-#include <mach/dc.h>
+
+#include "dc.h"
 
 #define ELD_MAX_MNL	16
 #define ELD_MAX_SAD	16

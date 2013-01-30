@@ -25,11 +25,11 @@
 #include <linux/workqueue.h>
 #include <asm/atomic.h>
 
-#include <mach/dc.h>
 #include <mach/kfuse.h>
 
 #include <video/nvhdcp.h>
 
+#include "dc.h"
 #include "dc_reg.h"
 #include "dc_priv.h"
 #include "hdmi_reg.h"

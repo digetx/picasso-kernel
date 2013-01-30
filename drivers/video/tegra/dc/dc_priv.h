@@ -29,11 +29,10 @@
 #include <linux/switch.h>
 #include <linux/nvhost.h>
 
-#include <mach/dc.h>
-
-#include <mach/tegra_dc_ext.h>
 #include <mach/clk.h>
 
+#include "tegra_dc_ext.h"
+#include "dc.h"
 #include "dc_reg.h"
 
 #define WIN_IS_TILED(win)	((win)->flags & TEGRA_WIN_FLAG_TILED)

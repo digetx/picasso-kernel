@@ -31,10 +31,10 @@
 
 #include <asm/atomic.h>
 
-#include <mach/dc.h>
-#include <mach/fb.h>
 #include <linux/nvhost.h>
 
+#include "dc.h"
+#include "fb.h"
 #include "dc_priv.h"
 #include "../nvmap/nvmap.h"
 #include "../host/dev.h"

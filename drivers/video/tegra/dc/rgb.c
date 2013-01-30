@@ -19,8 +19,7 @@
 
 #include <linux/kernel.h>
 
-#include <mach/dc.h>
-
+#include "dc.h"
 #include "dc_reg.h"
 #include "dc_priv.h"
 

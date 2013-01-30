@@ -19,10 +19,10 @@
 #include <linux/err.h>
 #include <linux/types.h>
 
-#include <mach/dc.h>
 #include <linux/nvmap.h>
 
 /* ugh */
+#include "../dc.h"
 #include "../../nvmap/nvmap.h"
 
 #include "tegra_dc_ext_priv.h"

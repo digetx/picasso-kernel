@@ -30,11 +30,11 @@
 #include <linux/module.h>
 
 #include <mach/clk.h>
-#include <mach/dc.h>
-#include <mach/fb.h>
 #include <mach/csi.h>
 #include <linux/nvhost.h>
 
+#include "dc.h"
+#include "fb.h"
 #include "dc_reg.h"
 #include "dc_priv.h"
 #include "dsi_regs.h"

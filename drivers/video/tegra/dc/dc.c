@@ -48,12 +48,12 @@
 #include <linux/videomode.h>
 
 #include <mach/clk.h>
-#include <mach/dc.h>
-#include <mach/fb.h>
 #include <mach/mc.h>
 #include <linux/nvhost.h>
 #include <mach/latency_allowance.h>
 
+#include "dc.h"
+#include "fb.h"
 #include "dc_reg.h"
 #include "dc_config.h"
 #include "dc_priv.h"
