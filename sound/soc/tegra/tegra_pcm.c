@@ -59,6 +59,7 @@ static const struct snd_pcm_hardware tegra_pcm_hardware = {
 
 static int tegra_pcm_open(struct snd_pcm_substream *substream)
 {
+	struct tegra_runtime_data *prtd;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct device *dev = rtd->platform->dev;
 	int ret;
@@ -66,17 +67,40 @@ static int tegra_pcm_open(struct snd_pcm_substream *substream)
 	/* Set HW params now that initialization is complete */
 	snd_soc_set_runtime_hwparams(substream, &tegra_pcm_hardware);
 
+	prtd = kzalloc(sizeof(*prtd), GFP_KERNEL);
+	if (!prtd)
+		return -ENOMEM;
+
 	ret = snd_dmaengine_pcm_open(substream, NULL, NULL);
 	if (ret) {
 		dev_err(dev, "dmaengine pcm open failed with err %d\n", ret);
+		kfree(prtd);
 		return ret;
 	}
+
+#ifdef CONFIG_HAS_WAKELOCK
+	snprintf(prtd->tegra_wake_lock_name, ARRAY_SIZE(prtd->tegra_wake_lock_name),
+		"tegra-pcm-%s-%d",
+		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK) ? "out" : "in",
+		substream->pcm->device);
+	wake_lock_init(&prtd->tegra_wake_lock, WAKE_LOCK_SUSPEND,
+		       prtd->tegra_wake_lock_name);
+#endif
+
+	snd_dmaengine_pcm_set_data(substream, prtd);
 
 	return 0;
 }
 
 static int tegra_pcm_close(struct snd_pcm_substream *substream)
 {
+	struct tegra_runtime_data *prtd = snd_dmaengine_pcm_get_data(substream);
+
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_destroy(&prtd->tegra_wake_lock);
+#endif
+	kfree(prtd);
+
 	snd_dmaengine_pcm_close(substream);
 	return 0;
 }
@@ -129,16 +153,24 @@ static int tegra_pcm_hw_free(struct snd_pcm_substream *substream)
 
 static int tegra_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
+	struct tegra_runtime_data *prtd = snd_dmaengine_pcm_get_data(substream);
+
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock(&prtd->tegra_wake_lock);
+#endif
 		return snd_dmaengine_pcm_trigger(substream,
 					SNDRV_PCM_TRIGGER_START);
 
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_unlock(&prtd->tegra_wake_lock);
+#endif
 		return snd_dmaengine_pcm_trigger(substream,
 					SNDRV_PCM_TRIGGER_STOP);
 	default:

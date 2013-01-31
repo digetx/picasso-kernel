@@ -31,11 +31,22 @@
 #ifndef __TEGRA_PCM_H__
 #define __TEGRA_PCM_H__
 
+#ifdef CONFIG_HAS_WAKELOCK
+#include <linux/wakelock.h>
+#endif
+
 struct tegra_pcm_dma_params {
 	unsigned long addr;
 	unsigned long wrap;
 	unsigned long width;
 	unsigned long req_sel;
+};
+
+struct tegra_runtime_data {
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock tegra_wake_lock;
+	char tegra_wake_lock_name[32];
+#endif
 };
 
 int tegra_pcm_platform_register(struct device *dev);
