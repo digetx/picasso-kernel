@@ -300,7 +300,7 @@ static int tegra20_spdif_platform_probe(struct platform_device *pdev)
 		goto err_clk_put;
 	}
 
-	dmareq = platform_get_resource(pdev, IORESOURCE_DMA, 0);
+	dmareq = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (!dmareq) {
 		dev_err(&pdev->dev, "No DMA resource\n");
 		ret = -ENODEV;
@@ -391,11 +391,17 @@ static const struct dev_pm_ops tegra20_spdif_pm_ops = {
 			   tegra20_spdif_runtime_resume, NULL)
 };
 
+static const struct of_device_id tegra20_spdif_of_match[] = {
+	{ .compatible = "nvidia,tegra20-spdif", },
+	{},
+};
+
 static struct platform_driver tegra20_spdif_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
 		.pm = &tegra20_spdif_pm_ops,
+		.of_match_table = tegra20_spdif_of_match,
 	},
 	.probe = tegra20_spdif_platform_probe,
 	.remove = tegra20_spdif_platform_remove,
@@ -407,3 +413,4 @@ MODULE_AUTHOR("Stephen Warren <swarren@nvidia.com>");
 MODULE_DESCRIPTION("Tegra20 SPDIF ASoC driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:" DRV_NAME);
+MODULE_DEVICE_TABLE(of, tegra20_spdif_of_match);
