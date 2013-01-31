@@ -27,6 +27,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <mach/hdmi-audio.h>
 #include <linux/slab.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -67,7 +68,7 @@ static int tegra20_spdif_hw_params(struct snd_pcm_substream *substream,
 	struct device *dev = dai->dev;
 	struct tegra20_spdif *spdif = snd_soc_dai_get_drvdata(dai);
 	unsigned int mask, val;
-	int ret, spdifclock;
+	int ret, srate, spdifclock;
 
 	mask = TEGRA20_SPDIF_CTRL_PACK |
 	       TEGRA20_SPDIF_CTRL_BIT_MODE_MASK;
@@ -82,7 +83,9 @@ static int tegra20_spdif_hw_params(struct snd_pcm_substream *substream,
 
 	regmap_update_bits(spdif->regmap, TEGRA20_SPDIF_CTRL, mask, val);
 
-	switch (params_rate(params)) {
+	srate = params_rate(params);
+
+	switch (srate) {
 	case 32000:
 		spdifclock = 4096000;
 		break;
@@ -111,6 +114,16 @@ static int tegra20_spdif_hw_params(struct snd_pcm_substream *substream,
 	ret = clk_set_rate(spdif->clk_spdif_out, spdifclock);
 	if (ret) {
 		dev_err(dev, "Can't set SPDIF clock rate: %d\n", ret);
+		return ret;
+	}
+
+	regmap_update_bits(spdif->regmap, TEGRA20_SPDIF_DATA_FIFO_CSR,
+					TEGRA20_SPDIF_DATA_FIFO_CSR_TX_ATN_LVL_MASK,
+					TEGRA20_SPDIF_DATA_FIFO_CSR_TX_ATN_LVL_TU4_WORD_FULL);
+
+	ret = tegra_hdmi_setup_audio_freq_source(srate, SPDIF);
+	if (ret) {
+		dev_err(dev, "Can't set HDMI audio freq source: %d\n", ret);
 		return ret;
 	}
 
