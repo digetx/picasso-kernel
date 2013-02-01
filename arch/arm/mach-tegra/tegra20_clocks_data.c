@@ -1039,6 +1039,62 @@ static struct clk *tegra_list_clks[] = {
 	&tegra_kfuse,
 };
 
+static const char *emc[] = {
+	"emc",
+};
+
+#define SHARED_CLK(_name, _dev, _con)			\
+	static struct clk tegra_##_name;		\
+	static struct clk_tegra tegra_##_name##_hw = {	\
+		.hw = {					\
+			.clk = &tegra_##_name,		\
+		},					\
+		.lookup = {				\
+			.dev_id = _dev,			\
+			.con_id = #_con,		\
+		},					\
+	};						\
+	static struct clk tegra_##_name = {		\
+		.name = #_name,				\
+		.ops = &tegra_clk_shared_bus_ops,	\
+		.hw = &tegra_##_name##_hw.hw,		\
+		.parent = &tegra_##_con,		\
+		.parent_names = _con,			\
+		.num_parents = 1,			\
+		.flags = CLK_SET_RATE_PARENT  |		\
+			 CLK_SET_RATE_NOCACHE |		\
+			 CLK_NO_CHILD_RECALC,		\
+	};
+
+SHARED_CLK(avp_emc,   "tegra-avp",    emc);
+SHARED_CLK(cpu_emc,   "cpu",          emc);
+SHARED_CLK(disp1_emc, "tegradc.0",    emc);
+SHARED_CLK(disp2_emc, "tegradc.1",    emc);
+SHARED_CLK(hdmi_emc,  "hdmi",         emc);
+SHARED_CLK(3d_emc,    "tegra_gr3d",   emc);
+SHARED_CLK(2d_emc,    "tegra_gr2d",   emc);
+SHARED_CLK(mpe_emc,   "tegra_mpe",    emc);
+SHARED_CLK(usbd_emc,  "tegra-udc.0",  emc);
+SHARED_CLK(usb1_emc,  "tegra-ehci.0", emc);
+SHARED_CLK(usb2_emc,  "tegra-ehci.1", emc);
+SHARED_CLK(usb3_emc,  "tegra-ehci.2", emc);
+SHARED_CLK(camera_emc,"tegra_camera", emc);
+
+static struct clk *tegra_list_shared_clks[] = {
+	&tegra_avp_emc,
+	&tegra_cpu_emc,
+	&tegra_disp1_emc,
+	&tegra_disp2_emc,
+	&tegra_hdmi_emc,
+	&tegra_3d_emc,
+	&tegra_2d_emc,
+	&tegra_usbd_emc,
+	&tegra_usb1_emc,
+	&tegra_usb2_emc,
+	&tegra_usb3_emc,
+	&tegra_camera_emc,
+};
+
 #define CLK_DUPLICATE(_name, _dev, _con)	\
 	{					\
 		.name	= _name,		\
@@ -1081,7 +1137,7 @@ static struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("pll_p_out3", "tegra-i2c.1", "fast-clk"),
 	CLK_DUPLICATE("pll_p_out3", "tegra-i2c.2", "fast-clk"),
 	CLK_DUPLICATE("pll_p_out3", "tegra-i2c.3", "fast-clk"),
-	CLK_DUPLICATE("cclk",	NULL,		"cpu"),
+	CLK_DUPLICATE("cclk",        NULL,         "cpu"),
 };
 
 #define CLK(dev, con, ck)	\
@@ -1151,6 +1207,9 @@ void __init tegra2_init_clocks(void)
 
 	for (i = 0; i < ARRAY_SIZE(tegra_list_clks); i++)
 		tegra2_init_one_clock(tegra_list_clks[i]);
+
+	for (i = 0; i < ARRAY_SIZE(tegra_list_shared_clks); i++)
+		tegra2_init_one_clock(tegra_list_shared_clks[i]);
 
 	for (i = 0; i < ARRAY_SIZE(tegra_clk_duplicates); i++) {
 		c = tegra_get_clock_by_name(tegra_clk_duplicates[i].name);
