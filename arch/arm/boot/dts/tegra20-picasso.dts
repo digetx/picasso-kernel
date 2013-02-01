@@ -519,6 +519,13 @@
 			micdet-delay = <100>;
 			gpio-cfg = <0xffffffff 0xffffffff 0 0xffffffff 0xffffffff>;
 		};
+
+		al3000a@1c {
+			compatible = "al,al3000a";
+			reg = <0x1c>;
+			interrupt-parent = <&gpio>;
+			interrupts = <202 0x04>; /* GPIO PZ2 */
+		};
 	};
 
 	i2c@7000c400 {
