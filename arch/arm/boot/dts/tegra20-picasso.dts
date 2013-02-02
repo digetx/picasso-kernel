@@ -889,6 +889,32 @@
 		vdd_dmic-supply = <&avdd_vdac_reg>;
 	};
 
+	serial@70006040 {
+		status = "okay";
+		compatible = "nvidia,tegra20-hsuart";
+		nvidia,dma-request-selector = <&apbdma 9>;
+	};
+
+	serial@70006200 {
+		status = "okay";
+		compatible = "nvidia,tegra20-hsuart";
+		nvidia,dma-request-selector = <&apbdma 10>;
+	};
+
+	serial@70006300 {
+		status = "okay";
+		compatible = "nvidia,tegra20-hsuart";
+		nvidia,dma-request-selector = <&apbdma 19>;
+	};
+
+	bluetooth-power {
+		compatible = "bcm4329,bluetooth-power";
+
+		wake-gpio = <&gpio 161 0>; /* gpio PU1 */
+		reset-gpio = <&gpio 160 0>; /* gpio PU0 */
+		host-wake-gpio = <&gpio 166 0>; /* gpio PU6 */
+	};
+
 	memory-controller@7000f400 {
 		nvidia,use-ram-code;
 

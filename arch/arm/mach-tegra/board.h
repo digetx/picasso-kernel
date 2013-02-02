@@ -55,5 +55,7 @@ static inline int harmony_pcie_init(void) { return 0; }
 
 void __init tegra_paz00_wifikill_init(void);
 
+void __init picasso_machine_init(void);
+
 extern struct sys_timer tegra_sys_timer;
 #endif

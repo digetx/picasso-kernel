@@ -35,6 +35,7 @@
 #include <linux/usb/tegra_usb_phy.h>
 #include <linux/nvhost.h>
 #include <linux/nvmap.h>
+#include <linux/tegra_uart.h>
 
 #include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
@@ -75,6 +76,21 @@ struct tegra_ehci_platform_data tegra_udc_pdata = {
 	.operating_mode	= TEGRA_USB_DEVICE,
 };
 
+struct tegra_uart_platform_data tegra_uartb_pdata = {
+	.dma_req_sel = 9,
+	.line = 1,
+};
+
+struct tegra_uart_platform_data tegra_uartc_pdata = {
+	.dma_req_sel = 10,
+	.line = 2,
+};
+
+struct tegra_uart_platform_data tegra_uartd_pdata = {
+	.dma_req_sel = 19,
+	.line = 3,
+};
+
 struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC1_BASE, "sdhci-tegra.0", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC2_BASE, "sdhci-tegra.1", NULL),
@@ -106,6 +122,12 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-slink", 0x7000DA00, "spi_tegra.3", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-spdif", 0x70002400, "tegra20-spdif", NULL),
 	OF_DEV_AUXDATA("alsa,spdif-dit", 0, "spdif-dit.0", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-hsuart", 0x70006040, "tegra-uart.1",
+		       &tegra_uartb_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-hsuart", 0x70006200, "tegra-uart.2",
+		       &tegra_uartc_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-hsuart", 0x70006300, "tegra-uart.3",
+		       &tegra_uartd_pdata),
 	NVHOST_T20_OF_DEV_AUXDATA,
 	{}
 };
@@ -138,18 +160,6 @@ static __initdata struct tegra_clk_init_table tegra_dt_clk_init_table[] = {
 	{ NULL,		NULL,		0,		0},
 };
 
-static void __init tegra_dt_init(void)
-{
-	tegra_clk_init_from_table(tegra_dt_clk_init_table);
-
-	/*
-	 * Finished with the static registrations now; fill in the missing
-	 * devices
-	 */
-	of_platform_populate(NULL, of_default_bus_match_table,
-				tegra20_auxdata_lookup, NULL);
-}
-
 static void __init trimslice_init(void)
 {
 #ifdef CONFIG_TEGRA_PCI
@@ -177,25 +187,38 @@ static void __init paz00_init(void)
 	tegra_paz00_wifikill_init();
 }
 
-static __initdata struct tegra_clk_init_table tegra_picasso_clk_init_table[] = {
-	{ "pwm",	"clk_m",	12000000,	false },
-	{ NULL,		NULL,		0,		0},
-};
-
-static void __init picasso_init(void)
-{
-	tegra_clk_init_from_table(tegra_picasso_clk_init_table);
-}
-
 static struct {
 	char *machine;
-	void (*init)(void);
+	void (*init_late)(void);
+	void (*init_machine)(void);
 } board_init_funcs[] = {
 	{ "compulab,trimslice", trimslice_init },
 	{ "nvidia,harmony", harmony_init },
 	{ "compal,paz00", paz00_init },
-	{ "acer,picasso", picasso_init },
+	{ "acer,picasso", NULL, picasso_machine_init },
 };
+
+static void __init tegra_dt_init(void)
+{
+	int i;
+
+	tegra_clk_init_from_table(tegra_dt_clk_init_table);
+
+	for (i = 0; i < ARRAY_SIZE(board_init_funcs); i++) {
+		if (of_machine_is_compatible(board_init_funcs[i].machine) &&
+					board_init_funcs[i].init_machine) {
+			board_init_funcs[i].init_machine();
+			break;
+		}
+	}
+
+	/*
+	 * Finished with the static registrations now; fill in the missing
+	 * devices
+	 */
+	of_platform_populate(NULL, of_default_bus_match_table,
+				tegra20_auxdata_lookup, NULL);
+}
 
 static void __init tegra_dt_init_late(void)
 {
@@ -204,8 +227,9 @@ static void __init tegra_dt_init_late(void)
 	tegra_init_late();
 
 	for (i = 0; i < ARRAY_SIZE(board_init_funcs); i++) {
-		if (of_machine_is_compatible(board_init_funcs[i].machine)) {
-			board_init_funcs[i].init();
+		if (of_machine_is_compatible(board_init_funcs[i].machine) &&
+						board_init_funcs[i].init_late) {
+			board_init_funcs[i].init_late();
 			break;
 		}
 	}
