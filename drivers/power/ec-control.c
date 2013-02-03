@@ -18,11 +18,11 @@
 
 #include <asm/system.h>
 
-// #include <media/yuv5_sensor.h>
-// #include <media/lsc_from_ec.h>
+#include <media/yuv5_sensor.h>
+#include <media/lsc_from_ec.h>
 
-// struct sensor_reg_copy EC_D65_patch_ram_table[LSC_LINE + 1];
-// struct sensor_reg_copy EC_CWF_patch_ram_table[LSC_LINE + 1];
+struct sensor_reg_copy EC_D65_patch_ram_table[LSC_LINE + 1];
+struct sensor_reg_copy EC_CWF_patch_ram_table[LSC_LINE + 1];
 int lsc_from_ec_status = 0;
 
 #define DRV_NAME			"ec-control"

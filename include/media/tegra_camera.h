@@ -45,6 +45,11 @@ enum StereoCameraMode {
 	StereoCameraMode_Force32 = 0x7FFFFFFF
 };
 
+int tegra_camera_clk_set_rate(struct tegra_camera_clk_info *info);
+void tegra_camera_clk_enable(void);
+void tegra_camera_clk_disable(void);
+bool tegra_camera_probed(void);
+void tegra_camera_gpio_set(bool enable);
 
 #define TEGRA_CAMERA_IOCTL_ENABLE		_IOWR('i', 1, uint)
 #define TEGRA_CAMERA_IOCTL_DISABLE		_IOWR('i', 2, uint)

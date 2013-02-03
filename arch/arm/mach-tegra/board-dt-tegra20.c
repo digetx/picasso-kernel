@@ -128,6 +128,8 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 		       &tegra_uartc_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-hsuart", 0x70006300, "tegra-uart.3",
 		       &tegra_uartd_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-avp", 0, "tegra-avp", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-camera", 0, "tegra_camera", NULL),
 	NVHOST_T20_OF_DEV_AUXDATA,
 	{}
 };

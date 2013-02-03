@@ -605,6 +605,37 @@
 	i2c@7000c500 {
 		status = "okay";
 		clock-frequency = <400000>;
+
+		camera-front@3c {
+			compatible = "aptina,mt9d115";
+			reg = <0x3c>;
+			oe-gpio = <&gpio 90 0>; /* gpio PL2 */
+			rst-gpio = <&gpio 92 0>; /* gpio PL4 */
+		};
+
+		camera-back1@3d {
+			compatible = "aptina,mt9p111";
+			reg = <0x3d>;
+			pwdn-gpio = <&gpio 88 0>; /* gpio PL0 */
+			rst-gpio = <&gpio 94 0>; /* gpio PL6 */
+		};
+
+		camera-back2@36 {
+			compatible = "omnivision,ov5650l";
+			reg = <0x36>;
+			pwdn-gpio = <&gpio 88 0>; /* gpio PL0 */
+			rst-gpio = <&gpio 94 0>; /* gpio PL6 */
+		};
+
+		camera-focuser@0c {
+			compatible = "ad5820";
+			reg = <0x0c>;
+		};
+
+		camera-flash@33 {
+			compatible = "nvidia,ltc3216";
+			reg = <0x33>;
+		};
 	};
 
 	regulators {
@@ -913,6 +944,18 @@
 		wake-gpio = <&gpio 161 0>; /* gpio PU1 */
 		reset-gpio = <&gpio 160 0>; /* gpio PU0 */
 		host-wake-gpio = <&gpio 166 0>; /* gpio PU6 */
+	};
+
+	tegra-avp {
+		compatible = "nvidia,tegra20-avp";
+		interrupts = <0 4 0x04>;
+		interrupt-names = "mbox_from_avp_pending";
+	};
+
+	tegra-camera {
+		compatible = "nvidia,tegra20-camera";
+		power-gpio = <&gpio 172 0>; /* gpio PV4 */
+		vcsi-supply = <&avdd_vdac_reg>;
 	};
 
 	memory-controller@7000f400 {

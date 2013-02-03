@@ -145,3 +145,14 @@ void __init tegra_init_irq(void)
 		gic_init(0, 29, distbase,
 			IO_ADDRESS(TEGRA_ARM_PERIF_BASE + 0x100));
 }
+
+void tegra_init_legacy_irq_cop(void)
+{
+	int i;
+
+	for (i = 0; i < num_ictlrs; i++) {
+		void __iomem *ictlr = ictlr_reg_base[i];
+		writel(~0, ictlr + ICTLR_COP_IER_CLR);
+		writel(0, ictlr + ICTLR_COP_IEP_CLASS);
+	}
+}
