@@ -973,6 +973,12 @@
 		vcsi-supply = <&avdd_vdac_reg>;
 	};
 
+	tegra-aes@6001a000 {
+		compatible = "nvidia,tegra20-aes";
+		reg = <0x6001a000 0x3c00>;
+		interrupts = <0 10 0x04>;
+	};
+
 	memory-controller@7000f400 {
 		nvidia,use-ram-code;
 

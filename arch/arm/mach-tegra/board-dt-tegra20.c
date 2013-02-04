@@ -136,6 +136,7 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-avp", 0, "tegra-avp", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-camera", 0, "tegra_camera", NULL),
 	OF_DEV_AUXDATA("wireless,bcmdhd", 0, "bcmdhd_wlan", &picasso_wifi_control),
+	OF_DEV_AUXDATA("nvidia,tegra20-aes", 0x6001a000, "tegra-aes", NULL),
 	NVHOST_T20_OF_DEV_AUXDATA,
 	{}
 };
