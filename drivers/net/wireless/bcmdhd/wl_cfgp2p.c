@@ -1464,8 +1464,8 @@ wl_cfgp2p_listen_complete(struct wl_priv *wl, struct net_device *ndev,
 			wl_clr_drv_status(wl, FAKE_REMAINING_ON_CHANNEL, netdev);
 #endif /* WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST */
 			if (ndev && (ndev->ieee80211_ptr != NULL)) {
-				cfg80211_remain_on_channel_expired(ndev, wl->last_roc_id,
-					&wl->remain_on_chan, wl->remain_on_chan_type, GFP_KERNEL);
+				cfg80211_remain_on_channel_expired(ndev->ieee80211_ptr, wl->last_roc_id,
+					&wl->remain_on_chan, GFP_KERNEL);
 			}
 		}
 		if (wl_add_remove_eventmsg(wl_to_prmry_ndev(wl),
@@ -1510,9 +1510,8 @@ wl_cfgp2p_cancel_listen(struct wl_priv *wl, struct net_device *ndev,
 		del_timer_sync(&wl->p2p->listen_timer);
 		if (notify)
 			if (ndev && ndev->ieee80211_ptr) {
-				cfg80211_remain_on_channel_expired(ndev, wl->last_roc_id,
-				 &wl->remain_on_chan, wl->remain_on_chan_type,
-				 GFP_KERNEL);
+				cfg80211_remain_on_channel_expired(ndev->ieee80211_ptr, wl->last_roc_id,
+				 &wl->remain_on_chan, GFP_KERNEL);
 			}
 	}
 	return 0;
@@ -2319,7 +2318,7 @@ static int wl_cfgp2p_if_stop(struct net_device *net)
 	if (!wl)
 		return -EINVAL;
 	spin_lock_irqsave(&wl->cfgdrv_lock, flags);
-	if (wl->scan_request && wl->scan_request->dev == net) {
+	if (wl->scan_request && wl->scan_request->wdev->netdev == net) {
 		cfg80211_scan_done(wl->scan_request, true);
 		wl->scan_request = NULL;
 		clear_flag = 1;

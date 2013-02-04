@@ -26,6 +26,7 @@
 
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/of.h>
 
 #include <wl_android.h>
 #include <wldev_common.h>
@@ -867,6 +868,12 @@ static int wifi_resume(struct platform_device *pdev)
 	return 0;
 }
 
+static struct of_device_id wifi_of_match[] = {
+	{ .compatible	= "wireless,bcmdhd", },
+	{ },
+}
+MODULE_DEVICE_TABLE(of, wifi_of_match);
+
 static struct platform_driver wifi_device = {
 	.probe          = wifi_probe,
 	.remove         = wifi_remove,
@@ -874,6 +881,7 @@ static struct platform_driver wifi_device = {
 	.resume         = wifi_resume,
 	.driver         = {
 	.name   = "bcmdhd_wlan",
+	.of_match_table = of_match_ptr(wifi_of_match),
 	}
 };
 

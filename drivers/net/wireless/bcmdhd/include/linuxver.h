@@ -97,7 +97,10 @@
 #endif
 #endif	
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
+#define USE_KTHREAD_API
+#define DAEMONIZE(a) {}
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
 #define DAEMONIZE(a) daemonize(a); \
 	allow_signal(SIGKILL); \
 	allow_signal(SIGTERM);
@@ -515,6 +518,8 @@ typedef struct {
 }
 
 #ifdef USE_KTHREAD_API
+#include <linux/kthread.h>
+
 #define PROC_START2(thread_func, owner, tsk_ctl, flags, name) \
 { \
 	sema_init(&((tsk_ctl)->sema), 0); \
