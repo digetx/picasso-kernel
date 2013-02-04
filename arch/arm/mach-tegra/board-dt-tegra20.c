@@ -36,6 +36,7 @@
 #include <linux/nvhost.h>
 #include <linux/nvmap.h>
 #include <linux/tegra_uart.h>
+#include <linux/platform_data/mmc-sdhci-tegra.h>
 
 #include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
@@ -91,8 +92,12 @@ struct tegra_uart_platform_data tegra_uartd_pdata = {
 	.line = 3,
 };
 
+extern struct tegra_sdhci_platform_data picasso_wlan_sdhci_pdata;
+extern struct wifi_platform_data picasso_wifi_control;
+
 struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
-	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC1_BASE, "sdhci-tegra.0", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC1_BASE, "sdhci-tegra.0",
+		       &picasso_wlan_sdhci_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC2_BASE, "sdhci-tegra.1", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC3_BASE, "sdhci-tegra.2", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC4_BASE, "sdhci-tegra.3", NULL),
@@ -130,6 +135,7 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 		       &tegra_uartd_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-avp", 0, "tegra-avp", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-camera", 0, "tegra_camera", NULL),
+	OF_DEV_AUXDATA("wireless,bcmdhd", 0, "bcmdhd_wlan", &picasso_wifi_control),
 	NVHOST_T20_OF_DEV_AUXDATA,
 	{}
 };

@@ -1130,6 +1130,7 @@ static struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("epp",        "tegra_gr2d",   "epp"),
 	CLK_DUPLICATE("mpe",        "tegra_mpe",    "mpe"),
 	CLK_DUPLICATE("cop",        "tegra-avp",    "cop"),
+	CLK_DUPLICATE("sclk",       "tegra-avp",    "sclk"),
 	CLK_DUPLICATE("vde",        "tegra-aes",    "vde"),
 	CLK_DUPLICATE("twd",        "smp_twd",      NULL),
 	CLK_DUPLICATE("bsea",       "tegra-aes",    "bsea"),

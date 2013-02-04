@@ -315,10 +315,11 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 		/* Cards with density > 2GiB are sector addressed */
 		if (card->ext_csd.sectors > (2u * 1024 * 1024 * 1024) / 512) {
-			if (card->host->index == 0) {
+			/* Assume that only internal sd uses nonremovable cap */
+			if (card->host->caps & MMC_CAP_NONREMOVABLE) {
 				/* size is in 256K chunks, i.e. 512 sectors each */
 				/* This algorithm is defined and used by nVidia, according to eMMC 4.41, size is in 128K chunks */
-				boot_partition_sectors = ext_csd[226] * 512;
+				boot_partition_sectors = ext_csd[EXT_CSD_BOOT_MULT] * 512;
 				card->ext_csd.sectors -= boot_partition_sectors;
 			}
 			mmc_card_set_blockaddr(card);
