@@ -1239,7 +1239,9 @@ static int tegra_vbus_session(struct usb_gadget *gadget, int is_active)
 		udc->usb_state = USB_STATE_DEFAULT;
 		spin_unlock_irqrestore(&udc->lock,flags);
 		usb_phy_set_suspend(&udc->phy->u_phy, 1);
+		clk_disable_unprepare(udc->emc_clk);
 	} else if (!udc->vbus_active && is_active) {
+		clk_prepare_enable(udc->emc_clk);
 		usb_phy_set_suspend(&udc->phy->u_phy, 0);
 		/* setup the controller in the device mode */
 		dr_controller_setup(udc);
@@ -2445,10 +2447,17 @@ static int tegra_udc_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	/* TODO: avoid persistent enable */
 	err = clk_prepare_enable(udc->clk);
 	if (err)
 		return err;
+
+	udc->emc_clk = devm_clk_get(&pdev->dev, "emc");
+	if (IS_ERR(udc->emc_clk)) {
+		dev_err(&pdev->dev, "can't get emc clock\n");
+		err = PTR_ERR(udc->emc_clk);
+		return err;
+	}
+	clk_set_rate(udc->emc_clk, 400000000);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {

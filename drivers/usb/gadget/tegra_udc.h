@@ -405,6 +405,7 @@ struct tegra_udc {
 	struct usb_ctrlrequest local_setup_buff;
 	struct usb_phy *transceiver;
 	struct clk *clk;
+	struct clk *emc_clk;
 	struct ep_queue_head *ep_qh;	/* Endpoints Queue-Head */
 	struct tegra_req *status_req;	/* ep0 status request */
 	struct dma_pool *td_pool;	/* dma pool for DTD */
