@@ -979,6 +979,16 @@
 		interrupts = <0 10 0x04>;
 	};
 
+	timed-gpio {
+		compatible = "android,timed-gpio";
+
+		vibrator {
+			gpio = <&gpio 173 0>; /* gpio PV5 */
+			name = "vibrator";
+			max-timeout = <10000>;
+		};
+	};
+
 	memory-controller@7000f400 {
 		nvidia,use-ram-code;
 
