@@ -265,15 +265,17 @@ int tegra_dc_set_dynamic_emc(struct tegra_dc_win *windows[], int n)
 
 	dc = windows[0]->dc;
 
-	/* calculate the new rate based on this POST */
-	new_rate = tegra_dc_get_bandwidth(windows, n);
-	if (WARN_ONCE(new_rate > (ULONG_MAX / 1000), "bandwidth maxed out\n"))
-		new_rate = ULONG_MAX;
-	else
-		new_rate = EMC_BW_TO_FREQ(new_rate * 1000);
-
 	if (tegra_dc_has_multiple_dc())
 		new_rate = ULONG_MAX;
+	else {
+		/* calculate the new rate based on this POST */
+		new_rate = tegra_dc_get_bandwidth(windows, n);
+		if (WARN_ONCE(new_rate > (ULONG_MAX / 1000), "bandwidth maxed out\n"))
+			new_rate = ULONG_MAX;
+		else
+			new_rate = max(EMC_BW_TO_FREQ(new_rate * 1000),
+				       dc->pdata->min_emc_clk_rate);
+	}
 
 	trace_printk("%s:new_emc_clk_rate=%ld\n", dc->ndev->name, new_rate);
 	dc->new_emc_clk_rate = new_rate;

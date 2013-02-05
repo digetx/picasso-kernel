@@ -1843,6 +1843,12 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 		return NULL;
 	pdata->default_out = dc_out;
 
+	if (!of_property_read_u32(np, "default-emc-rate", &val))
+		pdata->emc_clk_rate = val;
+
+	if (!of_property_read_u32(np, "min-emc-rate", &val))
+		pdata->min_emc_clk_rate = val;
+
 	/* set dc params */
 	if (!of_property_read_u32(np, "type", &val))
 		dc_out->type = val;
@@ -1967,7 +1973,7 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 		return -ENOENT;
 	}
 
-	dc = kzalloc(sizeof(struct tegra_dc), GFP_KERNEL);
+	dc = devm_kzalloc(&ndev->dev, sizeof(*dc), GFP_KERNEL);
 	if (!dc) {
 		dev_err(&ndev->dev, "can't allocate memory for tegra_dc\n");
 		return -ENOMEM;
@@ -1976,51 +1982,44 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	irq = nvhost_get_irq_byname(ndev, "irq");
 	if (irq <= 0) {
 		dev_err(&ndev->dev, "no irq\n");
-		ret = -ENOENT;
-		goto err_free;
+		return -ENOENT;
 	}
 
 	res = nvhost_get_resource_byname(ndev, IORESOURCE_MEM, "regs");
 	if (!res) {
 		dev_err(&ndev->dev, "no mem resource\n");
-		ret = -ENOENT;
-		goto err_free;
+		return -ENOENT;
 	}
 
-	base_res = request_mem_region(res->start, resource_size(res),
-		ndev->name);
+	base_res = devm_request_mem_region(&ndev->dev, res->start,
+					   resource_size(res), ndev->name);
 	if (!base_res) {
 		dev_err(&ndev->dev, "request_mem_region failed\n");
-		ret = -EBUSY;
-		goto err_free;
+		return -EBUSY;
 	}
 
 	fb_mem = nvhost_get_resource_byname(ndev, IORESOURCE_MEM, "fbmem");
 	if (!fb_mem) {
 		dev_err(&ndev->dev, "no fb_mem resource\n");
-		ret = -ENOENT;
-		goto err_free;
+		return -ENOENT;
 	}
 
-	base = ioremap(res->start, resource_size(res));
+	base = devm_ioremap(&ndev->dev, res->start, resource_size(res));
 	if (!base) {
 		dev_err(&ndev->dev, "registers can't be mapped\n");
-		ret = -EBUSY;
-		goto err_release_resource_reg;
+		return -EBUSY;
 	}
 
-	clk = clk_get(&ndev->dev, NULL);
+	clk = devm_clk_get(&ndev->dev, NULL);
 	if (IS_ERR_OR_NULL(clk)) {
 		dev_err(&ndev->dev, "can't get clock\n");
-		ret = -ENOENT;
-		goto err_iounmap_reg;
+		return -ENOENT;
 	}
 
-	emc_clk = clk_get(&ndev->dev, "emc");
+	emc_clk = devm_clk_get(&ndev->dev, "emc");
 	if (IS_ERR_OR_NULL(emc_clk)) {
 		dev_err(&ndev->dev, "can't get emc clock\n");
-		ret = -ENOENT;
-		goto err_put_clk;
+		return -ENOENT;
 	}
 
 	dc->clk = clk;
@@ -2036,12 +2035,6 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	dc->ndev = ndev;
 	dc->pdata = ndev->dev.platform_data;
 
-	/*
-	 * The emc is a shared clock, it will be set based on
-	 * the requirements for each user on the bus.
-	 */
-	dc->emc_clk_rate = 0;
-
 	mutex_init(&dc->lock);
 	mutex_init(&dc->one_shot_lock);
 	init_completion(&dc->frame_end_complete);
@@ -2051,7 +2044,6 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	INIT_WORK(&dc->reset_work, tegra_dc_reset_worker);
 #endif
 	INIT_WORK(&dc->vblank_work, tegra_dc_vblank);
-	dc->vblank_ref_count = 0;
 	INIT_DELAYED_WORK(&dc->underflow_work, tegra_dc_underflow_worker);
 	INIT_DELAYED_WORK(&dc->one_shot_work, tegra_dc_one_shot_worker);
 
@@ -2069,14 +2061,13 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	ret = tegra_dc_set(dc, ndev->id);
 	if (ret < 0) {
 		dev_err(&ndev->dev, "can't add dc\n");
-		goto err_free_irq;
+		return ret;
 	}
 
 	nvhost_set_drvdata(ndev, dc);
 
 #ifdef CONFIG_SWITCH
 	dc->modeset_switch.name = dev_name(&ndev->dev);
-	dc->modeset_switch.state = 0;
 	dc->modeset_switch.print_state = switch_modeset_print_mode;
 	switch_dev_register(&dc->modeset_switch);
 #endif
@@ -2107,11 +2098,10 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	mutex_unlock(&dc->lock);
 
 	/* interrupt handler must be registered before tegra_fb_register() */
-	if (request_irq(irq, tegra_dc_irq, 0,
+	if (devm_request_irq(&ndev->dev, irq, tegra_dc_irq, 0,
 			dev_name(&ndev->dev), dc)) {
 		dev_err(&ndev->dev, "request_irq %d failed\n", irq);
-		ret = -EBUSY;
-		goto err_put_emc_clk;
+		return -EBUSY;
 	}
 
 	tegra_dc_create_debugfs(dc);
@@ -2158,23 +2148,6 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	tegra_dc_create_sysfs(&dc->ndev->dev);
 
 	return 0;
-
-err_free_irq:
-	free_irq(irq, dc);
-err_put_emc_clk:
-	clk_put(emc_clk);
-err_put_clk:
-	clk_put(clk);
-err_iounmap_reg:
-	iounmap(base);
-	if (fb_mem)
-		release_resource(fb_mem);
-err_release_resource_reg:
-	release_resource(base_res);
-err_free:
-	kfree(dc);
-
-	return ret;
 }
 
 static int tegra_dc_remove(struct nvhost_device *ndev)
@@ -2205,13 +2178,6 @@ static int tegra_dc_remove(struct nvhost_device *ndev)
 #ifdef CONFIG_SWITCH
 	switch_dev_unregister(&dc->modeset_switch);
 #endif
-	free_irq(dc->irq, dc);
-	clk_put(dc->emc_clk);
-	clk_put(dc->clk);
-	iounmap(dc->base);
-	if (dc->fb_mem)
-		release_resource(dc->base_res);
-	kfree(dc);
 	tegra_dc_set(NULL, ndev->id);
 	return 0;
 }

@@ -91,6 +91,8 @@
 					depth = <18>;
 					dither = <2>; /* TEGRA_DC_ORDERED_DITHER */
 
+					default-emc-rate = <600000000>;
+
 					display-timings {
 						native-mode = <&timing0>;
 						timing0: 1280x800 {
