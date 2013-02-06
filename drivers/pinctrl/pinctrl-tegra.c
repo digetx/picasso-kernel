@@ -41,6 +41,11 @@ struct tegra_pmx {
 
 	int nbanks;
 	void __iomem **regs;
+
+#ifdef CONFIG_PM_SLEEP
+	int *bank_nregs;
+	u32 *regs_storage;
+#endif
 };
 
 static inline u32 pmx_readl(struct tegra_pmx *pmx, u32 bank, u32 reg)
@@ -687,12 +692,83 @@ static struct pinctrl_desc tegra_pinctrl_desc = {
 	.owner = THIS_MODULE,
 };
 
+#ifdef CONFIG_PM_SLEEP
+static int tegra_pinctrl_suspend_noirq(struct device *dev)
+{
+	struct tegra_pmx *pmx = dev_get_drvdata(dev);
+	u32 *regs_storage = pmx->regs_storage;
+	u32 *regs;
+	int i, j;
+
+	for (i = 0; i < pmx->nbanks; i++) {
+		regs = pmx->regs[i];
+		for (j = 0; j < pmx->bank_nregs[i]; j++)
+			*regs_storage++ = readl(regs++);
+	}
+
+	return 0;
+}
+
+static int tegra_pinctrl_resume_noirq(struct device *dev)
+{
+	struct tegra_pmx *pmx = dev_get_drvdata(dev);
+	u32 *regs_storage = pmx->regs_storage;
+	u32 *regs;
+	int i, j;
+
+	for (i = 0; i < pmx->nbanks; i++) {
+		regs = pmx->regs[i];
+		for (j = 0; j < pmx->bank_nregs[i]; j++)
+			writel(*regs_storage++, regs++);
+	}
+
+	return 0;
+}
+
+const struct dev_pm_ops tegra_pinctrl_pm_ops = {
+	.suspend_noirq = tegra_pinctrl_suspend_noirq,
+	.resume_noirq = tegra_pinctrl_resume_noirq,
+};
+
+static int tegra_pinctrl_pm_init(struct tegra_pmx *pmx)
+{
+	struct platform_device *pdev = to_platform_device(pmx->dev);
+	struct resource *res;
+	int i, bank_size, total_banks_size = 0;
+
+	pmx->bank_nregs = devm_kzalloc(&pdev->dev,
+				       pmx->nbanks * sizeof(*pmx->bank_nregs),
+				       GFP_KERNEL);
+	if (!pmx->bank_nregs) {
+		dev_err(&pdev->dev, "Can't alloc bank_nregs pointer\n");
+		return -ENODEV;
+	}
+
+	for (i = 0; i < pmx->nbanks; i++) {
+		res = platform_get_resource(pdev, IORESOURCE_MEM, i);
+		bank_size = resource_size(res);
+
+		pmx->bank_nregs[i] = bank_size / 4;
+		total_banks_size += bank_size;
+	}
+
+	pmx->regs_storage = devm_kzalloc(&pdev->dev, total_banks_size,
+					 GFP_KERNEL);
+	if (!pmx->regs_storage) {
+		dev_err(&pdev->dev, "Can't alloc regs_storage pointer\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+#endif
+
 int tegra_pinctrl_probe(struct platform_device *pdev,
 			const struct tegra_pinctrl_soc_data *soc_data)
 {
 	struct tegra_pmx *pmx;
 	struct resource *res;
-	int i;
+	int i, ret = 0;
 
 	pmx = devm_kzalloc(&pdev->dev, sizeof(*pmx), GFP_KERNEL);
 	if (!pmx) {
@@ -701,6 +777,7 @@ int tegra_pinctrl_probe(struct platform_device *pdev,
 	}
 	pmx->dev = &pdev->dev;
 	pmx->soc = soc_data;
+	pmx->nbanks = pdev->num_resources;
 
 	tegra_pinctrl_gpio_range.npins = pmx->soc->ngpios;
 	tegra_pinctrl_desc.name = dev_name(&pdev->dev);
@@ -744,6 +821,12 @@ int tegra_pinctrl_probe(struct platform_device *pdev,
 		}
 	}
 
+#ifdef CONFIG_PM_SLEEP
+	ret = tegra_pinctrl_pm_init(pmx);
+	if (ret)
+		return ret;
+#endif
+
 	pmx->pctl = pinctrl_register(&tegra_pinctrl_desc, &pdev->dev, pmx);
 	if (!pmx->pctl) {
 		dev_err(&pdev->dev, "Couldn't register pinctrl driver\n");
@@ -756,7 +839,7 @@ int tegra_pinctrl_probe(struct platform_device *pdev,
 
 	dev_dbg(&pdev->dev, "Probed Tegra pinctrl driver\n");
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(tegra_pinctrl_probe);
 
