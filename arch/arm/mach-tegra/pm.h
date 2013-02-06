@@ -32,4 +32,10 @@ bool tegra_set_cpu_in_lp2(int phy_cpu_id);
 void tegra_idle_lp2_last(u32 cpu_on_time, u32 cpu_off_time);
 extern void (*tegra_tear_down_cpu)(void);
 
+#ifdef CONFIG_PM_SLEEP
+void tegra_init_suspend(void);
+#else
+#define tegra_init_suspend() do {} while(0)
+#endif
+
 #endif /* _MACH_TEGRA_PM_H_ */

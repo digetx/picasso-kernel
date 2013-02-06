@@ -24,6 +24,8 @@
 #include <linux/cpu_pm.h>
 #include <linux/clk.h>
 #include <linux/err.h>
+#include <linux/suspend.h>
+#include <linux/syscore_ops.h>
 
 #include <asm/smp_plat.h>
 #include <asm/cacheflush.h>
@@ -212,5 +214,20 @@ void tegra_idle_lp2_last(u32 cpu_on_time, u32 cpu_off_time)
 
 	restore_cpu_complex();
 	cpu_cluster_pm_exit();
+}
+
+static int tegra_suspend_enter(suspend_state_t state)
+{
+	return 0;
+}
+
+static const struct platform_suspend_ops tegra_suspend_ops = {
+	.valid = suspend_valid_only_mem,
+	.enter = tegra_suspend_enter,
+};
+
+void __init tegra_init_suspend(void)
+{
+	suspend_set_ops(&tegra_suspend_ops);
 }
 #endif
