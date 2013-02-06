@@ -1088,6 +1088,7 @@ static struct clk *tegra_list_shared_clks[] = {
 	&tegra_hdmi_emc,
 	&tegra_3d_emc,
 	&tegra_2d_emc,
+	&tegra_mpe_emc,
 	&tegra_usbd_emc,
 	&tegra_usb1_emc,
 	&tegra_usb2_emc,
