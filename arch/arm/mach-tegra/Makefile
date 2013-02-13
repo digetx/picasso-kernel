@@ -12,6 +12,8 @@ obj-y					+= pm.o
 obj-y                                   += mc.o
 obj-y                                   += csi.o
 obj-y                                   += kfuse.o
+obj-y                                   += wakeups.o
+obj-$(CONFIG_PM_SLEEP)                  += pm-irq.o
 obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
 obj-$(CONFIG_CPU_IDLE)			+= sleep.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += tegra20_clocks.o
@@ -21,6 +23,9 @@ obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= tegra2_emc.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= sleep-tegra20.o
 ifeq ($(CONFIG_CPU_IDLE),y)
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= cpuidle-tegra20.o
+endif
+ifeq ($(CONFIG_PM_SLEEP),y)
+obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= pm-t2.o
 endif
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)		+= tegra30_clocks.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)		+= tegra30_clocks_data.o

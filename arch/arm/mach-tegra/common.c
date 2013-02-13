@@ -147,7 +147,6 @@ void __init tegra20_init_early(void)
 	tegra_pmc_init();
 	tegra_powergate_init();
 	tegra20_hotplug_init();
-	tegra_init_suspend();
 }
 #endif
 #ifdef CONFIG_ARCH_TEGRA_3x_SOC

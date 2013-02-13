@@ -28,6 +28,7 @@
 
 #include "board-picasso.h"
 #include "clock.h"
+#include "pm.h"
 
 /******************************************************************************
 * Wifi
@@ -282,10 +283,20 @@ static __initdata struct tegra_clk_init_table tegra_picasso_clk_init_table[] = {
 	{ NULL,		NULL,		0,		0 },
 };
 
+static struct suspend_params picasso_sparams = {
+	.core_timer = 0x7e7e,
+	.core_off_timer = 0xf,
+	.corereq_high = false,
+	.sysclkreq_high = true,
+	.combined_req = false,
+};
+
 void __init picasso_machine_init(void)
 {
 	tegra_clk_init_from_table(tegra_picasso_clk_init_table);
 
 	picasso_uart_init();
 	picasso_wifi_init();
+
+	tegra_init_suspend(&picasso_sparams);
 }
