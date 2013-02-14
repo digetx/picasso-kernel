@@ -426,7 +426,10 @@ static ssize_t btmac_show(struct device *dev,
 	ec_read_multipart(client, buf, BTMAC_RD,
 			  BTMAC_PARTS_NB);
 
-	return sprintf(buf, "%s\n", buf);
+	return sprintf(buf, "%c%c:%c%c:%c%c:%c%c:%c%c:%c%c\n",
+			buf[0], buf[1], buf[2], buf[3], buf[4], 
+			buf[5], buf[6], buf[7], buf[8], buf[9], 
+			buf[10], buf[11]);
 }
 
 static ssize_t btmac_store(struct device *dev,
