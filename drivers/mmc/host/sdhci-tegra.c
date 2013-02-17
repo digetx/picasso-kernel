@@ -23,12 +23,12 @@
 #include <linux/gpio.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
-#include <linux/delay.h>
 #include <linux/platform_data/mmc-sdhci-tegra.h>
 
 #include "sdhci-pltfm.h"
 
 /* Tegra SDHOST controller vendor register definitions */
+#define SDHCI_VENDOR_CLOCK_CNTRL		0x100
 #define SDHCI_TEGRA_VENDOR_MISC_CTRL		0x120
 #define SDHCI_MISC_CTRL_ENABLE_SDHCI_SPEC_300	0x20
 
@@ -44,6 +44,7 @@ struct sdhci_tegra_soc_data {
 struct sdhci_tegra {
 	const struct tegra_sdhci_platform_data *plat;
 	const struct sdhci_tegra_soc_data *soc_data;
+	bool clk_enabled;
 };
 
 static u32 tegra_sdhci_readl(struct sdhci_host *host, int reg)
@@ -162,6 +163,25 @@ static int tegra_sdhci_8bit(struct sdhci_host *host, int bus_width)
 	return 0;
 }
 
+static void tegra_sdhci_set_clock(struct sdhci_host *sdhci, unsigned int clock)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
+	struct sdhci_tegra *tegra_host = pltfm_host->priv;
+
+	pr_debug("%s %s %u enabled=%u\n", __func__,
+		mmc_hostname(sdhci->mmc), clock, tegra_host->clk_enabled);
+
+	if (clock && !tegra_host->clk_enabled) {
+		clk_enable(pltfm_host->clk);
+		sdhci_writeb(sdhci, 1, SDHCI_VENDOR_CLOCK_CNTRL);
+		tegra_host->clk_enabled = true;
+	} else if (!clock && tegra_host->clk_enabled) {
+		sdhci_writeb(sdhci, 0, SDHCI_VENDOR_CLOCK_CNTRL);
+		clk_disable(pltfm_host->clk);
+		tegra_host->clk_enabled = false;
+	}
+}
+
 static struct sdhci_ops tegra_sdhci_ops = {
 	.get_ro     = tegra_sdhci_get_ro,
 	.read_l     = tegra_sdhci_readl,
@@ -169,6 +189,7 @@ static struct sdhci_ops tegra_sdhci_ops = {
 	.write_l    = tegra_sdhci_writel,
 	.platform_8bit_width = tegra_sdhci_8bit,
 	.platform_reset_exit = tegra_sdhci_reset_exit,
+	.set_clock = tegra_sdhci_set_clock,
 };
 
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
@@ -388,6 +409,7 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 		goto probe_err;
 	}
 	pltfm_host->clk = clk;
+	tegra_host->clk_enabled = true;
 
 	/* enable 1/8V DDR capable */
 	host->mmc->caps = MMC_CAP_1_8V_DDR;
@@ -421,10 +443,13 @@ static int sdhci_tegra_remove(struct platform_device *pdev)
 {
 	struct sdhci_host *host = platform_get_drvdata(pdev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_tegra *tegra_host = pltfm_host->priv;
 	int dead = (readl(host->ioaddr + SDHCI_INT_STATUS) == 0xffffffff);
 
 	sdhci_remove_host(host, dead);
-	clk_disable_unprepare(pltfm_host->clk);
+	if (tegra_host->clk_enabled)
+		clk_disable_unprepare(pltfm_host->clk);
+
 	sdhci_pltfm_free(pdev);
 
 	return 0;
@@ -436,7 +461,9 @@ static int tegra_sdhci_suspend(struct device *dev)
 	int ret;
 
 	ret = sdhci_suspend_host(host);
-	if (ret)
+	if (!ret)
+		tegra_sdhci_set_clock(host, 0);
+	else
 		dev_err(dev, "suspend of %s: failed, error = %d\n",
 			 mmc_hostname(host->mmc), ret);
 
@@ -446,35 +473,14 @@ static int tegra_sdhci_suspend(struct device *dev)
 static int tegra_sdhci_resume(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
-	size_t retries;
 	int ret;
+
+	tegra_sdhci_set_clock(host, 1);
 
 	ret = sdhci_resume_host(host);
 	if (ret)
 		dev_err(dev, "resume of %s: failed, error = %d\n",
 			mmc_hostname(host->mmc), ret);
-
-	/* Reset the controller and power on if MMC_KEEP_POWER flag is set */
-	if (host->mmc->pm_flags & MMC_PM_KEEP_POWER) {
-		sdhci_writeb(host, SDHCI_RESET_ALL, SDHCI_SOFTWARE_RESET);
-
-		retries = 100;
-
-		/* hw clears the bit when it's done */
-		while (sdhci_readb(host, SDHCI_SOFTWARE_RESET) &
-							SDHCI_RESET_ALL) {
-			if (retries == 0) {
-				dev_err(dev, "reset of %s never completed\n",
-					mmc_hostname(host->mmc));
-				return -ETIMEDOUT;
-			}
-			retries--;
-			mdelay(1);
-		}
-
-		sdhci_writeb(host, SDHCI_POWER_ON, SDHCI_POWER_CONTROL);
-		host->pwr = 0;
-	}
 
 	return ret;
 }
