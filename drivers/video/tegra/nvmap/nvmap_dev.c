@@ -803,7 +803,7 @@ static int nvmap_map(struct file *filp, struct vm_area_struct *vma)
 	atomic_set(&priv->count, 1);
 
 	vma->vm_flags |= VM_SHARED;
-	vma->vm_flags |= (VM_IO | VM_DONTEXPAND | VM_MIXEDMAP);
+	vma->vm_flags |= (VM_IO | VM_DONTEXPAND | VM_MIXEDMAP | VM_DONTDUMP);
 	vma->vm_ops = &nvmap_vma_ops;
 	vma->vm_private_data = priv;
 
