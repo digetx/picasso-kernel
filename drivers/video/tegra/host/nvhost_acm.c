@@ -477,7 +477,7 @@ int nvhost_module_init(struct nvhost_device *dev)
 
 	/* initialize clocks to known state */
 	INIT_LIST_HEAD(&dev->client_list);
-	while (dev->clocks[i].name && i < NVHOST_MODULE_MAX_CLOCKS) {
+	while (i < NVHOST_MODULE_MAX_CLOCKS && dev->clocks[i].name) {
 		char devname[MAX_DEVID_LENGTH];
 		long rate = dev->clocks[i].default_rate;
 		struct clk *c;
@@ -487,6 +487,7 @@ int nvhost_module_init(struct nvhost_device *dev)
 		if (IS_ERR_OR_NULL(c)) {
 			dev_err(&dev->dev, "Cannot get clock %s\n",
 					dev->clocks[i].name);
+			i++;
 			continue;
 		}
 
