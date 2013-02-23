@@ -1803,9 +1803,6 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	MT_DEBUG("qtaguid[%d]: sk=%p got_sock=%d fam=%d proto=%d\n",
 		 par->hooknum, sk, got_sock, par->family, ipx_proto(skb, par));
 
-	if (sk != NULL && sk->sk_state == TCP_TIME_WAIT)
-		return (info->match ^ info->invert) == 0;
-
 	if (sk != NULL) {
 		MT_DEBUG("qtaguid[%d]: sk=%p->sk_socket=%p->file=%p\n",
 			par->hooknum, sk, sk->sk_socket,
