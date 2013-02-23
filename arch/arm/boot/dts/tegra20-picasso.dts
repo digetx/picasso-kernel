@@ -600,6 +600,7 @@
 				compatible = "ec,ec-control";
 				reg = <0x58>;
 				ec,i2c-retry-count = <5>;
+				power-supply = <&gpio_charger>;
 			};
 		};
 	};
@@ -1063,6 +1064,12 @@
 				     <106 0>; /* PN2 */
 			count = <8>;
 		};
+	};
+
+	gpio_charger: charger {
+		compatible = "gpio-charger";
+		charger-type = <3>;
+		gpio = <&gpio 171 1>; /* gpio PV3 */
 	};
 
 	memory-controller@7000f400 {
