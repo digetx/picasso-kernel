@@ -1072,6 +1072,11 @@
 		gpio = <&gpio 171 1>; /* gpio PV3 */
 	};
 
+	rotation-lock {
+		compatible = "rotation-lock-switch";
+		gpio = <&gpio 130 0>; /* gpio PQ2 */
+	};
+
 	memory-controller@7000f400 {
 		nvidia,use-ram-code;
 
