@@ -12,4 +12,8 @@ config SWITCH_GPIO
 	help
 	  Say Y here to enable GPIO based switch support.
 
+config ROTATELOCK
+	tristate "RotationLock Switch support"
+	default n
+
 endif # SWITCH
