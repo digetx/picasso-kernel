@@ -92,6 +92,7 @@
 					dither = <2>; /* TEGRA_DC_ORDERED_DITHER */
 
 					default-emc-rate = <600000000>;
+					min-emc-rate = <300000000>;
 
 					display-timings {
 						native-mode = <&timing0>;
