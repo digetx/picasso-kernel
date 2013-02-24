@@ -715,6 +715,13 @@ static void tegra_usb_phy_close(struct usb_phy *x)
 		clk_put(phy->clk);
 	else
 		utmip_pad_close(phy);
+
+	if (phy->vdd_reg) {
+		if (phy->vdd_reg_on)
+			regulator_disable(phy->vdd_reg);
+		regulator_put(phy->vdd_reg);
+	}
+
 	clk_disable_unprepare(phy->pll_u);
 	clk_put(phy->pll_u);
 	kfree(phy);
@@ -722,6 +729,11 @@ static void tegra_usb_phy_close(struct usb_phy *x)
 
 static int tegra_usb_phy_power_on(struct tegra_usb_phy *phy)
 {
+	if (phy->vdd_reg && !phy->vdd_reg_on) {
+		regulator_enable(phy->vdd_reg);
+		phy->vdd_reg_on = true;
+	}
+
 	if (phy_is_ulpi(phy))
 		return ulpi_phy_power_on(phy);
 	else
@@ -734,6 +746,11 @@ static int tegra_usb_phy_power_off(struct tegra_usb_phy *phy)
 		return ulpi_phy_power_off(phy);
 	else
 		return utmi_phy_power_off(phy);
+
+	if (phy->vdd_reg && phy->vdd_reg_on) {
+		regulator_disable(phy->vdd_reg);
+		phy->vdd_reg_on = false;
+	}
 }
 
 static int	tegra_usb_phy_suspend(struct usb_phy *x, int suspend)
@@ -757,17 +774,27 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	if (!phy)
 		return ERR_PTR(-ENOMEM);
 
+	phy->vdd_reg = regulator_get(dev, "vusb");
+	if (IS_ERR(phy->vdd_reg)) {
+		pr_err("Can't get regulator avdd_usb*\n");
+		err = PTR_ERR(phy->vdd_reg);
+		goto err0;
+	}
+
+	regulator_enable(phy->vdd_reg);
+
 	phy->instance = instance;
 	phy->regs = regs;
 	phy->config = config;
 	phy->mode = phy_mode;
 	phy->dev = dev;
+	phy->vdd_reg_on = true;
 
 	if (!phy->config) {
 		if (phy_is_ulpi(phy)) {
 			pr_err("%s: ulpi phy configuration missing", __func__);
 			err = -EINVAL;
-			goto err0;
+			goto err1;
 		} else {
 			phy->config = &utmip_default[instance];
 		}
@@ -777,7 +804,7 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	if (IS_ERR(phy->pll_u)) {
 		pr_err("Can't get pll_u clock\n");
 		err = PTR_ERR(phy->pll_u);
-		goto err0;
+		goto err1;
 	}
 	clk_prepare_enable(phy->pll_u);
 
@@ -791,7 +818,7 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	if (!phy->freq) {
 		pr_err("invalid pll_u parent rate %ld\n", parent_rate);
 		err = -EINVAL;
-		goto err1;
+		goto err2;
 	}
 
 	phy->u_phy.init = tegra_phy_init;
@@ -800,9 +827,12 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 
 	return phy;
 
-err1:
+err2:
 	clk_disable_unprepare(phy->pll_u);
 	clk_put(phy->pll_u);
+err1:
+	regulator_disable(phy->vdd_reg);
+	regulator_put(phy->vdd_reg);
 err0:
 	kfree(phy);
 	return ERR_PTR(err);
