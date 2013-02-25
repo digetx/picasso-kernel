@@ -827,7 +827,8 @@ static struct clk *clk_calc_new_rates(struct clk *clk, unsigned long rate)
 	}
 
 out:
-	clk_calc_subtree(clk, new_rate);
+	if (!(clk->flags & CLK_NO_CHILD_RECALC))
+		clk_calc_subtree(clk, new_rate);
 
 	return top;
 }
@@ -913,16 +914,13 @@ static void clk_change_rate(struct clk *clk)
  *
  * Returns 0 on success, -EERROR otherwise.
  */
-int clk_set_rate(struct clk *clk, unsigned long rate)
+int __clk_set_rate(struct clk *clk, unsigned long rate)
 {
 	struct clk *top, *fail_clk;
 	int ret = 0;
 
-	/* prevent racing with updates to the clock topology */
-	mutex_lock(&prepare_lock);
-
 	/* bail early if nothing to do */
-	if (rate == clk->rate)
+	if (!(clk->flags & CLK_SET_RATE_NOCACHE) && rate == clk->rate)
 		goto out;
 
 	if ((clk->flags & CLK_SET_RATE_GATE) && clk->prepare_count) {
@@ -950,10 +948,21 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 	/* change the rates */
 	clk_change_rate(top);
 
-	mutex_unlock(&prepare_lock);
-
 	return 0;
 out:
+
+	return ret;
+}
+
+int clk_set_rate(struct clk *clk, unsigned long rate)
+{
+	int ret;
+
+	/* prevent racing with updates to the clock topology */
+	mutex_lock(&prepare_lock);
+
+	ret = __clk_set_rate(clk, rate);
+
 	mutex_unlock(&prepare_lock);
 
 	return ret;
