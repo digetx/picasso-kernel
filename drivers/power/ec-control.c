@@ -847,7 +847,7 @@ static void ec_reboot(char mode, const char *cmd)
 		if (!chip->is_panic)
 			ec_write_word_data(client, COLD_REBOOT, 1);
 		else
-			ec_write_word_data(client, WARM_REBOOT, 0);
+			ec_write_word_data_locked(client, WARM_REBOOT, 0);
 	}
 
 }
