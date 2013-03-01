@@ -1140,6 +1140,23 @@ static struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("pll_p_out3", "tegra-i2c.2", "fast-clk"),
 	CLK_DUPLICATE("pll_p_out3", "tegra-i2c.3", "fast-clk"),
 	CLK_DUPLICATE("cclk",        NULL,         "cpu"),
+
+	CLK_DUPLICATE("emc",         "tegra-dvfs",   "emc"),
+	CLK_DUPLICATE("disp1",       "tegra-dvfs",   "disp1"),
+	CLK_DUPLICATE("disp2",       "tegra-dvfs",   "disp2"),
+	CLK_DUPLICATE("hdmi",        "tegra-dvfs",   "hdmi"),
+	CLK_DUPLICATE("host1x",      "tegra-dvfs",   "host1x"),
+	CLK_DUPLICATE("epp",         "tegra-dvfs",   "epp"),
+	CLK_DUPLICATE("2d",          "tegra-dvfs",   "2d"),
+	CLK_DUPLICATE("3d",          "tegra-dvfs",   "3d"),
+	CLK_DUPLICATE("mpe",         "tegra-dvfs",   "mpe"),
+	CLK_DUPLICATE("vi",          "tegra-dvfs",   "vi"),
+	CLK_DUPLICATE("csi",         "tegra-dvfs",   "csi"),
+	CLK_DUPLICATE("vde",         "tegra-dvfs",   "vde"),
+	CLK_DUPLICATE("mipi",        "tegra-dvfs",   "mipi"),
+	CLK_DUPLICATE("usbd",        "tegra-dvfs",   "usbd"),
+	CLK_DUPLICATE("usb2",        "tegra-dvfs",   "usb2"),
+	CLK_DUPLICATE("usb3",        "tegra-dvfs",   "usb3"),
 };
 
 #define CLK(dev, con, ck)	\

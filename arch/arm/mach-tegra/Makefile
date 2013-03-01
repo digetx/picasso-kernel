@@ -49,3 +49,5 @@ obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= board-paz00.o
 
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= bluetooth-power.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= board-picasso.o
+
+obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= dvfs.o

@@ -718,17 +718,17 @@
 					regulator-always-on;
 				};
 
-				sm0 {
+				core_vdd_reg: sm0 {
 					regulator-name = "vdd_sm0,vdd_core";
-					regulator-min-microvolt = <1200000>;
-					regulator-max-microvolt = <1200000>;
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1300000>;
 					regulator-always-on;
 				};
 
-				sm1 {
+				cpu_vdd_reg: sm1 {
 					regulator-name = "vdd_sm1,vdd_cpu";
-					regulator-min-microvolt = <1000000>;
-					regulator-max-microvolt = <1000000>;
+					regulator-min-microvolt = <750000>;
+					regulator-max-microvolt = <1125000>;
 					regulator-always-on;
 				};
 
@@ -748,9 +748,9 @@
 					regulator-always-on;
 				};
 
-				ldo2 {
+				rtc_vdd_reg: ldo2 {
 					regulator-name = "vdd_ldo2,vdd_rtc";
-					regulator-min-microvolt = <1200000>;
+					regulator-min-microvolt = <950000>;
 					regulator-max-microvolt = <1200000>;
 				};
 
@@ -1081,6 +1081,13 @@
 	rotation-lock {
 		compatible = "rotation-lock-switch";
 		gpio = <&gpio 130 0>; /* gpio PQ2 */
+	};
+
+	dvfs {
+		compatible = "tegra20-dvfs";
+		core-supply = <&core_vdd_reg>;
+		rtc-supply = <&rtc_vdd_reg>;
+		cpu-supply = <&cpu_vdd_reg>;
 	};
 
 	memory-controller@7000f400 {

@@ -45,7 +45,7 @@ int tegra_is_clk_enabled(struct clk *clk);
 
 static inline int tegra_dvfs_set_rate(struct clk *c, unsigned long rate)
 {
-	return 0;
+	return clk_set_rate(c, rate);
 }
 
 #endif
