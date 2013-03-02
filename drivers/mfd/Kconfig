@@ -370,6 +370,19 @@ config MFD_STMPE
 		Keypad: stmpe-keypad
 		Touchscreen: stmpe-ts
 
+config MFD_EC_CONTROL
+	bool "Embedded controller driver for acer a50x tablets"
+	depends on I2C
+	select MFD_CORE
+	help
+	  Say Y to include support for a50x embedded controller.
+
+config LSC_FROM_EC
+	tristate "Load Lens Correction data from EC by Camera MI5140 2nd source(nonOTPM)"
+	depends on MFD_EC_CONTROL
+	help
+	  Say Y to include support for Load Lens Correction data from EC.
+
 menu "STMPE Interface Drivers"
 depends on MFD_STMPE
 
