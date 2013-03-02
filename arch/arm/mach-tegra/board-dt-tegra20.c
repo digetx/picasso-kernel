@@ -33,6 +33,10 @@
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
 #include <linux/usb/tegra_usb_phy.h>
+#include <linux/nvhost.h>
+#include <linux/nvmap.h>
+#include <linux/tegra_uart.h>
+#include <linux/platform_data/mmc-sdhci-tegra.h>
 
 #include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
@@ -69,8 +73,31 @@ struct tegra_ehci_platform_data tegra_ehci3_pdata = {
 	.vbus_gpio = -1,
 };
 
+struct tegra_ehci_platform_data tegra_udc_pdata = {
+	.operating_mode	= TEGRA_USB_DEVICE,
+};
+
+struct tegra_uart_platform_data tegra_uartb_pdata = {
+	.dma_req_sel = 9,
+	.line = 1,
+};
+
+struct tegra_uart_platform_data tegra_uartc_pdata = {
+	.dma_req_sel = 10,
+	.line = 2,
+};
+
+struct tegra_uart_platform_data tegra_uartd_pdata = {
+	.dma_req_sel = 19,
+	.line = 3,
+};
+
+extern struct tegra_sdhci_platform_data picasso_wlan_sdhci_pdata;
+extern struct wifi_platform_data picasso_wifi_control;
+
 struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
-	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC1_BASE, "sdhci-tegra.0", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC1_BASE, "sdhci-tegra.0",
+		       &picasso_wlan_sdhci_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC2_BASE, "sdhci-tegra.1", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC3_BASE, "sdhci-tegra.2", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC4_BASE, "sdhci-tegra.3", NULL),
@@ -85,6 +112,10 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 		       &tegra_ehci1_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-ehci", TEGRA_USB2_BASE, "tegra-ehci.1",
 		       &tegra_ehci2_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-otg", TEGRA_USB_BASE, "tegra-otg",
+		       &tegra_ehci1_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-udc", TEGRA_USB_BASE, "tegra-udc.0",
+		       &tegra_udc_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-ehci", TEGRA_USB3_BASE, "tegra-ehci.2",
 		       &tegra_ehci3_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-apbdma", TEGRA_APB_DMA_BASE, "tegra-apbdma", NULL),
@@ -94,12 +125,21 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-slink", 0x7000D600, "spi_tegra.1", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-slink", 0x7000D800, "spi_tegra.2", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-slink", 0x7000DA00, "spi_tegra.3", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-host1x", 0x50000000, "host1x", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-dc", 0x54200000, "tegradc.0", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-dc", 0x54240000, "tegradc.1", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-hdmi", 0x54280000, "hdmi", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-dsi", 0x54300000, "dsi", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-tvo", 0x542c0000, "tvo", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-spdif", 0x70002400, "tegra20-spdif", NULL),
+	OF_DEV_AUXDATA("alsa,spdif-dit", 0, "spdif-dit.0", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-hsuart", 0x70006040, "tegra-uart.1",
+		       &tegra_uartb_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-hsuart", 0x70006200, "tegra-uart.2",
+		       &tegra_uartc_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-hsuart", 0x70006300, "tegra-uart.3",
+		       &tegra_uartd_pdata),
+	OF_DEV_AUXDATA("nvidia,tegra20-avp", 0, "tegra-avp", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-camera", 0, "tegra_camera", NULL),
+	OF_DEV_AUXDATA("wireless,bcmdhd", 0, "bcmdhd_wlan", &picasso_wifi_control),
+	OF_DEV_AUXDATA("nvidia,tegra20-aes", 0x6001a000, "tegra-aes", NULL),
+	OF_DEV_AUXDATA("pwm-backlight", 0, "pwm-backlight", NULL),
+	OF_DEV_AUXDATA("tegra20-dvfs", 0, "tegra-dvfs", NULL),
+	NVHOST_T20_OF_DEV_AUXDATA,
 	{}
 };
 
@@ -116,6 +156,7 @@ static __initdata struct tegra_clk_init_table tegra_dt_clk_init_table[] = {
 	{ "blink",      "clk_32k",      32768,          true },
 	{ "i2s1",       "pll_a_out0",   11289600,       false},
 	{ "i2s2",       "pll_a_out0",   11289600,       false},
+	{ "spdif_out",  "pll_a_out0",   5644800,        false},
 	{ "sdmmc1",	"pll_p",	48000000,	false},
 	{ "sdmmc3",	"pll_p",	48000000,	false},
 	{ "sdmmc4",	"pll_p",	48000000,	false},
@@ -129,18 +170,6 @@ static __initdata struct tegra_clk_init_table tegra_dt_clk_init_table[] = {
 	{ "disp2",	"pll_p",	600000000,	false },
 	{ NULL,		NULL,		0,		0},
 };
-
-static void __init tegra_dt_init(void)
-{
-	tegra_clk_init_from_table(tegra_dt_clk_init_table);
-
-	/*
-	 * Finished with the static registrations now; fill in the missing
-	 * devices
-	 */
-	of_platform_populate(NULL, of_default_bus_match_table,
-				tegra20_auxdata_lookup, NULL);
-}
 
 static void __init trimslice_init(void)
 {
@@ -171,12 +200,36 @@ static void __init paz00_init(void)
 
 static struct {
 	char *machine;
-	void (*init)(void);
+	void (*init_late)(void);
+	void (*init_machine)(void);
 } board_init_funcs[] = {
 	{ "compulab,trimslice", trimslice_init },
 	{ "nvidia,harmony", harmony_init },
 	{ "compal,paz00", paz00_init },
+	{ "acer,picasso", NULL, picasso_machine_init },
 };
+
+static void __init tegra_dt_init(void)
+{
+	int i;
+
+	tegra_clk_init_from_table(tegra_dt_clk_init_table);
+
+	for (i = 0; i < ARRAY_SIZE(board_init_funcs); i++) {
+		if (of_machine_is_compatible(board_init_funcs[i].machine) &&
+					board_init_funcs[i].init_machine) {
+			board_init_funcs[i].init_machine();
+			break;
+		}
+	}
+
+	/*
+	 * Finished with the static registrations now; fill in the missing
+	 * devices
+	 */
+	of_platform_populate(NULL, of_default_bus_match_table,
+				tegra20_auxdata_lookup, NULL);
+}
 
 static void __init tegra_dt_init_late(void)
 {
@@ -185,8 +238,9 @@ static void __init tegra_dt_init_late(void)
 	tegra_init_late();
 
 	for (i = 0; i < ARRAY_SIZE(board_init_funcs); i++) {
-		if (of_machine_is_compatible(board_init_funcs[i].machine)) {
-			board_init_funcs[i].init();
+		if (of_machine_is_compatible(board_init_funcs[i].machine) &&
+						board_init_funcs[i].init_late) {
+			board_init_funcs[i].init_late();
 			break;
 		}
 	}
@@ -197,7 +251,7 @@ static const char *tegra20_dt_board_compat[] = {
 	NULL
 };
 
-DT_MACHINE_START(TEGRA_DT, "nVidia Tegra20 (Flattened Device Tree)")
+DT_MACHINE_START(TEGRA_DT, "nVidia Tegra20 FDT")
 	.map_io		= tegra_map_common_io,
 	.smp		= smp_ops(tegra_smp_ops),
 	.init_early	= tegra20_init_early,

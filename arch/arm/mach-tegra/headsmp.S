@@ -86,6 +86,7 @@ ENTRY(tegra_resume)
 
 	cpu_id	r0
 	cmp	r0, #0				@ CPU0?
+THUMB(	it	ne )		@ force fixup-able long branch encoding
 	bne	cpu_resume			@ no
 
 #ifdef CONFIG_ARCH_TEGRA_3x_SOC
@@ -115,9 +116,16 @@ ENTRY(tegra_resume)
 	str	r1, [r0]
 #endif
 
+	/* skip L2 cache resume if coming from deep sleep */
+	adr	r0, l2x0_saved_regs_addr
+	ldr	r0, [r0]
+	cmp	r0, #0
+	beq	2f
+
 	/* L2 cache resume & re-enable */
 	l2_cache_resume r0, r1, r2, l2x0_saved_regs_addr
 
+2:
 	b	cpu_resume
 ENDPROC(tegra_resume)
 #endif

@@ -13,20 +13,81 @@
  *
  */
 
+#include <linux/earlysuspend.h>
 #include <linux/module.h>
 #include <linux/wait.h>
+#include <linux/fb.h>
 
 #include "power.h"
 
-static wait_queue_head_t fb_state_wq;
+static DECLARE_WAIT_QUEUE_HEAD(fb_state_wq);
 static DEFINE_SPINLOCK(fb_state_lock);
 static enum {
 	FB_STATE_STOPPED_DRAWING,
 	FB_STATE_REQUEST_STOP_DRAWING,
 	FB_STATE_DRAWING_OK,
-} fb_state;
+} fb_state = FB_STATE_DRAWING_OK;
 
+/* tell userspace to stop drawing, wait for it to stop */
+static void stop_drawing_early_suspend(struct early_suspend *h)
+{
+	int ret;
+	unsigned long irq_flags;
 
+	spin_lock_irqsave(&fb_state_lock, irq_flags);
+	fb_state = FB_STATE_REQUEST_STOP_DRAWING;
+	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
+
+	wake_up_all(&fb_state_wq);
+	ret = wait_event_timeout(fb_state_wq,
+				 fb_state == FB_STATE_STOPPED_DRAWING,
+				 HZ);
+	if (unlikely(fb_state != FB_STATE_STOPPED_DRAWING))
+		pr_warn("stop_drawing_early_suspend: timeout waiting for "
+			"userspace to stop drawing\n");
+}
+
+/* tell userspace to start drawing */
+static void start_drawing_late_resume(struct early_suspend *h)
+{
+	unsigned long irq_flags;
+
+	spin_lock_irqsave(&fb_state_lock, irq_flags);
+	fb_state = FB_STATE_DRAWING_OK;
+	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
+
+	wake_up(&fb_state_wq);
+}
+
+static struct early_suspend stop_drawing_early_suspend_desc = {
+	.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
+	.suspend = stop_drawing_early_suspend,
+	.resume = start_drawing_late_resume,
+};
+
+/* powerdown dc's */
+static void fb_disable_early_suspend(struct early_suspend *h)
+{
+	int i;
+
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_POWERDOWN);
+}
+
+/* enable dc's */
+static void fb_enable_late_resume(struct early_suspend *h)
+{
+	int i;
+
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_UNBLANK);
+}
+
+static struct early_suspend fb_early_suspend_desc = {
+	.level = EARLY_SUSPEND_LEVEL_DISABLE_FB,
+	.suspend = fb_disable_early_suspend,
+	.resume = fb_enable_late_resume,
+};
 
 static ssize_t wait_for_fb_sleep_show(struct kobject *kobj,
 				      struct kobj_attribute *attr, char *buf)
@@ -90,27 +151,28 @@ static struct attribute_group attr_group = {
 	.attrs = g,
 };
 
-static int __init android_power_init(void)
+static int __init pm_fb_early_suspend_init(void)
 {
 	int ret;
 
-	init_waitqueue_head(&fb_state_wq);
-	fb_state = FB_STATE_DRAWING_OK;
-
 	ret = sysfs_create_group(power_kobj, &attr_group);
 	if (ret) {
-		pr_err("android_power_init: sysfs_create_group failed\n");
+		pr_err("fb_early_suspend_init: sysfs_create_group failed\n");
 		return ret;
 	}
 
+	register_early_suspend(&stop_drawing_early_suspend_desc);
+	register_early_suspend(&fb_early_suspend_desc);
 	return 0;
 }
 
-static void  __exit android_power_exit(void)
+static void  __exit pm_fb_early_suspend_exit(void)
 {
+	unregister_early_suspend(&stop_drawing_early_suspend_desc);
+	unregister_early_suspend(&fb_early_suspend_desc);
 	sysfs_remove_group(power_kobj, &attr_group);
 }
 
-module_init(android_power_init);
-module_exit(android_power_exit);
+module_init(pm_fb_early_suspend_init);
+module_exit(pm_fb_early_suspend_exit);
 

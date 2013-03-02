@@ -27,6 +27,8 @@
 #include <linux/wakelock.h>
 #include "input-compat.h"
 
+#define WAKELOCK_HOLDTIME	msecs_to_jiffies(5000)
+
 struct evdev {
 	int open;
 	struct input_handle handle;
@@ -75,14 +77,12 @@ static void __pass_event(struct evdev_client *client,
 		client->buffer[client->tail].value = 0;
 
 		client->packet_head = client->tail;
-		if (client->use_wake_lock)
-			wake_unlock(&client->wake_lock);
 	}
 
 	if (event->type == EV_SYN && event->code == SYN_REPORT) {
 		client->packet_head = client->head;
 		if (client->use_wake_lock)
-			wake_lock(&client->wake_lock);
+			wake_lock_timeout(&client->wake_lock, WAKELOCK_HOLDTIME);
 		kill_fasync(&client->fasync, SIGIO, POLL_IN);
 	}
 }
@@ -400,9 +400,6 @@ static int evdev_fetch_next_event(struct evdev_client *client,
 	if (have_event) {
 		*event = client->buffer[client->tail++];
 		client->tail &= client->bufsize - 1;
-		if (client->use_wake_lock &&
-		    client->packet_head == client->tail)
-			wake_unlock(&client->wake_lock);
 	}
 
 	spin_unlock_irq(&client->buffer_lock);
@@ -701,7 +698,7 @@ static int evdev_enable_suspend_block(struct evdev *evdev,
 	wake_lock_init(&client->wake_lock, WAKE_LOCK_SUSPEND, client->name);
 	client->use_wake_lock = true;
 	if (client->packet_head != client->tail)
-		wake_lock(&client->wake_lock);
+		wake_lock_timeout(&client->wake_lock, WAKELOCK_HOLDTIME);
 	spin_unlock_irq(&client->buffer_lock);
 	return 0;
 }

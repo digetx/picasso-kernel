@@ -78,6 +78,9 @@ static int tegra_clk_init_one_from_table(struct tegra_clk_init_table *table)
 
 	c = tegra_get_clock_by_name(table->name);
 
+	if (!c)
+		c = clk_get_sys(NULL, table->name);
+
 	if (!c) {
 		pr_warn("Unable to initialize clock %s\n",
 			table->name);
@@ -146,6 +149,12 @@ void tegra_periph_reset_assert(struct clk *c)
 	clk->reset(__clk_get_hw(c), true);
 }
 EXPORT_SYMBOL(tegra_periph_reset_assert);
+
+int tegra_is_clk_enabled(struct clk *c)
+{
+	return __clk_get_enable_count(c);
+}
+EXPORT_SYMBOL(tegra_is_clk_enabled);
 
 /* Several extended clock configuration bits (e.g., clock routing, clock
  * phase control) are included in PLL and peripheral clock source

@@ -2871,6 +2871,7 @@ static struct platform_driver tegra20_pinctrl_driver = {
 		.name = "tegra20-pinctrl",
 		.owner = THIS_MODULE,
 		.of_match_table = tegra20_pinctrl_of_match,
+		.pm = TEGRA_PINCTRL_PM,
 	},
 	.probe = tegra20_pinctrl_probe,
 	.remove = tegra_pinctrl_remove,

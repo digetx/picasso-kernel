@@ -682,11 +682,6 @@ static void tegra_dma_terminate_all(struct dma_chan *dc)
 	bool was_busy;
 
 	spin_lock_irqsave(&tdc->lock, flags);
-	if (list_empty(&tdc->pending_sg_req)) {
-		spin_unlock_irqrestore(&tdc->lock, flags);
-		return;
-	}
-
 	if (!tdc->busy)
 		goto skip_dma_stop;
 
@@ -897,6 +892,15 @@ static struct dma_async_tx_descriptor *tegra_dma_prep_slave_sg(
 		return NULL;
 	}
 
+	/*
+	 * Make sure that mode should not be conflicting with currently
+	 * configured mode.
+	 */
+	if (tdc->isr_handler && tdc->isr_handler != handle_once_dma_done) {
+		dev_err(tdc2dev(tdc), "DMA configured in cyclic mode\n");
+		return NULL;
+	}
+
 	ret = get_transfer_param(tdc, direction, &apb_ptr, &apb_seq, &csr,
 				&burst_size, &slave_bw);
 	if (ret < 0)
@@ -969,20 +973,9 @@ static struct dma_async_tx_descriptor *tegra_dma_prep_slave_sg(
 	if (flags & DMA_CTRL_ACK)
 		dma_desc->txd.flags = DMA_CTRL_ACK;
 
-	/*
-	 * Make sure that mode should not be conflicting with currently
-	 * configured mode.
-	 */
-	if (!tdc->isr_handler) {
-		tdc->isr_handler = handle_once_dma_done;
-		tdc->cyclic = false;
-	} else {
-		if (tdc->cyclic) {
-			dev_err(tdc2dev(tdc), "DMA configured in cyclic mode\n");
-			tegra_dma_desc_put(tdc, dma_desc);
-			return NULL;
-		}
-	}
+
+	tdc->isr_handler = handle_once_dma_done;
+	tdc->cyclic = false;
 
 	return &dma_desc->txd;
 }
@@ -1021,6 +1014,16 @@ struct dma_async_tx_descriptor *tegra_dma_prep_dma_cyclic(
 	 */
 	if (tdc->busy) {
 		dev_err(tdc2dev(tdc), "Request not allowed when dma running\n");
+		return NULL;
+	}
+
+	/*
+	 * Make sure that mode should not be conflicting with currently
+	 * configured mode.
+	 */
+	if (tdc->isr_handler &&
+			tdc->isr_handler != handle_cont_sngl_cycle_dma_done) {
+		dev_err(tdc2dev(tdc), "DMA configuration conflict\n");
 		return NULL;
 	}
 
@@ -1101,20 +1104,8 @@ struct dma_async_tx_descriptor *tegra_dma_prep_dma_cyclic(
 	if (flags & DMA_CTRL_ACK)
 		dma_desc->txd.flags = DMA_CTRL_ACK;
 
-	/*
-	 * Make sure that mode should not be conflicting with currently
-	 * configured mode.
-	 */
-	if (!tdc->isr_handler) {
-		tdc->isr_handler = handle_cont_sngl_cycle_dma_done;
-		tdc->cyclic = true;
-	} else {
-		if (!tdc->cyclic) {
-			dev_err(tdc2dev(tdc), "DMA configuration conflict\n");
-			tegra_dma_desc_put(tdc, dma_desc);
-			return NULL;
-		}
-	}
+	tdc->isr_handler = handle_cont_sngl_cycle_dma_done;
+	tdc->cyclic = true;
 
 	return &dma_desc->txd;
 }
@@ -1149,8 +1140,7 @@ static void tegra_dma_free_chan_resources(struct dma_chan *dc)
 
 	dev_dbg(tdc2dev(tdc), "Freeing channel %d\n", tdc->id);
 
-	if (tdc->busy)
-		tegra_dma_terminate_all(dc);
+	tegra_dma_terminate_all(dc);
 
 	spin_lock_irqsave(&tdc->lock, flags);
 	list_splice_init(&tdc->pending_sg_req, &sg_req_list);
@@ -1304,7 +1294,7 @@ static int tegra_dma_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev,
 				"request_irq failed with err %d channel %d\n",
-				i, ret);
+				ret, i);
 			goto err_irq;
 		}
 

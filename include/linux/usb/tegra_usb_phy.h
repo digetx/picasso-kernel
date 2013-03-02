@@ -16,6 +16,7 @@
 #define __TEGRA_USB_PHY_H
 
 #include <linux/clk.h>
+#include <linux/regulator/consumer.h>
 #include <linux/usb/otg.h>
 
 struct tegra_utmip_config {
@@ -51,6 +52,7 @@ struct tegra_usb_phy {
 	const struct tegra_xtal_freq *freq;
 	void __iomem *regs;
 	void __iomem *pad_regs;
+	void __iomem *ahb_gizmo;
 	struct clk *clk;
 	struct clk *pll_u;
 	struct clk *pad_clk;
@@ -59,6 +61,8 @@ struct tegra_usb_phy {
 	struct usb_phy *ulpi;
 	struct usb_phy u_phy;
 	struct device *dev;
+	struct regulator *vdd_reg;
+	bool vdd_reg_on;
 };
 
 struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
@@ -76,5 +80,9 @@ void tegra_ehci_phy_restore_start(struct tegra_usb_phy *phy,
 				 enum tegra_usb_phy_port_speed port_speed);
 
 void tegra_ehci_phy_restore_end(struct tegra_usb_phy *phy);
+
+void tegra_usb_phy_memory_prefetch_on(struct tegra_usb_phy *phy);
+
+void tegra_usb_phy_memory_prefetch_off(struct tegra_usb_phy *phy);
 
 #endif /* __TEGRA_USB_PHY_H */

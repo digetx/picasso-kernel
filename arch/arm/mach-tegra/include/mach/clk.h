@@ -41,4 +41,11 @@ unsigned long clk_get_rate_all_locked(struct clk *c);
 void tegra2_sdmmc_tap_delay(struct clk *c, int delay);
 int tegra_clk_cfg_ex(struct clk *c, enum tegra_clk_ex_param p, u32 setting);
 
+int tegra_is_clk_enabled(struct clk *clk);
+
+static inline int tegra_dvfs_set_rate(struct clk *c, unsigned long rate)
+{
+	return clk_set_rate(c, rate);
+}
+
 #endif

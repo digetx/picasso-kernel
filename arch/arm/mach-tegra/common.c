@@ -28,10 +28,10 @@
 
 #include <mach/powergate.h>
 
+#include "fuse.h"
 #include "board.h"
 #include "clock.h"
 #include "common.h"
-#include "fuse.h"
 #include "iomap.h"
 #include "pmc.h"
 #include "apbio.h"
@@ -87,7 +87,9 @@ static __initdata struct tegra_clk_init_table tegra20_clk_init_table[] = {
 	{ "pll_p_out1",	"pll_p",	28800000,	true },
 	{ "pll_p_out2",	"pll_p",	48000000,	true },
 	{ "pll_p_out3",	"pll_p",	72000000,	true },
-	{ "pll_p_out4",	"pll_p",	24000000,	true },
+	{ "pll_p_out4",	"pll_p",	108000000,	true },
+	{ "pll_m",	"clk_m",	0,		true },
+	{ "pll_m_out1",	"pll_m",	120000000,	true },
 	{ "pll_c",	"clk_m",	600000000,	true },
 	{ "pll_c_out1",	"pll_c",	120000000,	true },
 	{ "sclk",	"pll_c_out1",	120000000,	true },

@@ -20,18 +20,11 @@ config SUSPEND_FREEZER
 
 config HAS_WAKELOCK
 	bool
-	default n
+	default y
 
 config WAKELOCK
 	bool
-	default n
-
-config FB_EARLYSUSPEND
-	bool "Sysfs compat interface for earlysuspend"
-	---help---
-	  Register early suspend handler that notifies and waits for
-	  user-space through sysfs when user-space should stop drawing
-	  to the screen and notifies user-space when it should resume.
+	default y
 
 config HIBERNATE_CALLBACKS
 	bool
@@ -144,6 +137,32 @@ config PM_WAKELOCKS_GC
 	bool "Garbage collector for user space wakeup sources"
 	depends on PM_WAKELOCKS
 	default y
+
+config PM_EARLYSUSPEND
+	bool "Early suspend"
+	depends on PM_AUTOSLEEP
+	default n
+	---help---
+	  Call early suspend handlers when the user requested sleep state
+	  changes.
+
+config PM_FB_EARLYSUSPEND
+	bool "Framebuffer Early Suspend (sysfs interface)"
+	depends on PM_EARLYSUSPEND
+	default n
+	---help---
+	  Register early suspend handler that notifies and waits for
+	  user-space through sysfs when user-space should stop drawing
+	  to the screen and notifies user-space when it should resume.
+
+config PM_CONSOLE_EARLYSUSPEND
+	bool "Console switch on early-suspend"
+	depends on PM_EARLYSUSPEND && VT
+	default n
+	---help---
+	  Register early suspend handler to perform a console switch to
+	  when user-space should stop drawing to the screen and a switch
+	  back when it should resume.
 
 config PM_RUNTIME
 	bool "Run-time PM core functionality"

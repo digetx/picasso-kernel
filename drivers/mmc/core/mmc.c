@@ -23,6 +23,9 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
+#define SANDISK_X3_CID_MID 69
+unsigned int boot_partition_sectors = 0;
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -311,8 +314,16 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			ext_csd[EXT_CSD_SEC_CNT + 3] << 24;
 
 		/* Cards with density > 2GiB are sector addressed */
-		if (card->ext_csd.sectors > (2u * 1024 * 1024 * 1024) / 512)
+		if (card->ext_csd.sectors > (2u * 1024 * 1024 * 1024) / 512) {
+			/* Assume that only internal sd uses nonremovable cap */
+			if (card->host->caps & MMC_CAP_NONREMOVABLE) {
+				/* size is in 256K chunks, i.e. 512 sectors each */
+				/* This algorithm is defined and used by nVidia, according to eMMC 4.41, size is in 128K chunks */
+				boot_partition_sectors = ext_csd[EXT_CSD_BOOT_MULT] * 512;
+				card->ext_csd.sectors -= boot_partition_sectors;
+			}
 			mmc_card_set_blockaddr(card);
+		}
 	}
 
 	card->ext_csd.raw_card_type = ext_csd[EXT_CSD_CARD_TYPE];
@@ -957,6 +968,12 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 
 		/* Erase size depends on CSD and Extended CSD */
 		mmc_set_erase_size(card);
+	}
+
+	if (card->cid.manfid == SANDISK_X3_CID_MID) {
+		err = mmc_switch(card, 0x0, EXT_CSD_POWER_CLASS, 4, card->ext_csd.generic_cmd6_time);
+		if (err)
+			printk(KERN_ERR "%s: switch power class fail \n", mmc_hostname(card->host));
 	}
 
 	/*

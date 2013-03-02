@@ -33,6 +33,10 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
+#include <linux/regulator/consumer.h>
+#ifdef CONFIG_SWITCH
+#include <linux/switch.h>
+#endif
 
 #include <sound/core.h>
 #include <sound/jack.h>
@@ -50,6 +54,10 @@
 struct tegra_wm8903 {
 	struct tegra_wm8903_platform_data pdata;
 	struct tegra_asoc_utils_data util_data;
+#ifdef CONFIG_SWITCH
+	int jack_status;
+#endif
+	struct regulator *dmic_reg;
 };
 
 static int tegra_wm8903_hw_params(struct snd_pcm_substream *substream,
@@ -94,18 +102,124 @@ static int tegra_wm8903_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static int tegra_spdif_hw_params(struct snd_pcm_substream *substream,
+                                 struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
+	int srate, mclk, min_mclk;
+	int err;
+
+	srate = params_rate(params);
+	switch (srate) {
+	case 11025:
+	case 22050:
+	case 44100:
+	case 88200:
+		mclk = 11289600;
+		break;
+	case 8000:
+	case 16000:
+	case 32000:
+	case 48000:
+	case 64000:
+	case 96000:
+		mclk = 12288000;
+		break;
+	default:
+		return -EINVAL;
+	}
+	min_mclk = 128 * srate;
+
+	err = tegra_asoc_utils_set_rate(&machine->util_data, srate, mclk);
+	if (err < 0) {
+		if (!(machine->util_data.set_mclk % min_mclk))
+			mclk = machine->util_data.set_mclk;
+		else {
+			dev_err(card->dev, "Can't configure clocks\n");
+			return err;
+		}
+	}
+
+	return 0;
+}
+
 static struct snd_soc_ops tegra_wm8903_ops = {
 	.hw_params = tegra_wm8903_hw_params,
 };
 
+static struct snd_soc_ops tegra_spdif_ops = {
+	.hw_params = tegra_spdif_hw_params,
+};
+
 static struct snd_soc_jack tegra_wm8903_hp_jack;
 
+#ifdef CONFIG_SWITCH
+/* These values are copied from Android WiredAccessoryObserver */
+enum headset_state {
+	BIT_NO_HEADSET = 0,
+	BIT_HEADSET = (1 << 0),
+	BIT_HEADSET_NO_MIC = (1 << 1),
+};
+
+static struct switch_dev tegra_wm8903_hp_switch = {
+	.name = "h2w",
+};
+
+static int tegra_wm8903_jack_notifier(struct notifier_block *self,
+                                      unsigned long action, void *dev)
+{
+	struct snd_soc_jack *jack = dev;
+	struct snd_soc_codec *codec = jack->codec;
+	struct snd_soc_card *card = codec->card;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
+	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
+	enum headset_state state = BIT_NO_HEADSET;
+
+	if (jack == &tegra_wm8903_hp_jack) {
+		machine->jack_status &= ~SND_JACK_HEADPHONE;
+		machine->jack_status |= (action & SND_JACK_HEADPHONE);
+	} else {
+		machine->jack_status &= ~SND_JACK_MICROPHONE;
+		machine->jack_status |= (action & SND_JACK_MICROPHONE);
+	}
+
+	switch (machine->jack_status) {
+	case SND_JACK_HEADPHONE:
+		snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
+		snd_soc_dapm_disable_pin(dapm, "Int Spk");
+		state = BIT_HEADSET_NO_MIC;
+		break;
+	case SND_JACK_HEADSET:
+		snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
+		snd_soc_dapm_disable_pin(dapm, "Int Spk");
+		state = BIT_HEADSET;
+		break;
+	case SND_JACK_MICROPHONE:
+		/* mic: would not report */
+	default:
+		snd_soc_dapm_disable_pin(dapm, "Headphone Jack");
+		snd_soc_dapm_enable_pin(dapm, "Int Spk");
+		state = BIT_NO_HEADSET;
+	}
+
+	switch_set_state(&tegra_wm8903_hp_switch, state);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block tegra_wm8903_jack_detect_nb = {
+	.notifier_call = tegra_wm8903_jack_notifier,
+};
+#else
 static struct snd_soc_jack_pin tegra_wm8903_hp_jack_pins[] = {
 	{
 		.pin = "Headphone Jack",
 		.mask = SND_JACK_HEADPHONE,
 	},
 };
+#endif
 
 static struct snd_soc_jack_gpio tegra_wm8903_hp_jack_gpio = {
 	.name = "headphone detect",
@@ -157,9 +271,32 @@ static int tegra_wm8903_event_hp(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int tegra_wm8903_event_int_mic(struct snd_soc_dapm_widget *w,
+                                        struct snd_kcontrol *k, int event)
+{
+	struct snd_soc_dapm_context *dapm = w->dapm;
+	struct snd_soc_card *card = dapm->card;
+	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
+	struct tegra_wm8903_platform_data *pdata = &machine->pdata;
+
+	if (machine->dmic_reg) {
+		if (SND_SOC_DAPM_EVENT_ON(event))
+			regulator_enable(machine->dmic_reg);
+		else
+			regulator_disable(machine->dmic_reg);
+	}
+
+	if (gpio_is_valid(pdata->gpio_int_mic_en))
+		gpio_set_value_cansleep(pdata->gpio_int_mic_en,
+					SND_SOC_DAPM_EVENT_ON(event));
+
+	return 0;
+}
+
 static const struct snd_soc_dapm_widget tegra_wm8903_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Int Spk", tegra_wm8903_event_int_spk),
 	SND_SOC_DAPM_HP("Headphone Jack", tegra_wm8903_event_hp),
+	SND_SOC_DAPM_MIC("Int Mic", tegra_wm8903_event_int_mic),
 	SND_SOC_DAPM_MIC("Mic Jack", NULL),
 };
 
@@ -190,24 +327,29 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 	if (gpio_is_valid(pdata->gpio_hp_det)) {
 		tegra_wm8903_hp_jack_gpio.gpio = pdata->gpio_hp_det;
 		snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,
-				&tegra_wm8903_hp_jack);
+						&tegra_wm8903_hp_jack);
+#ifdef CONFIG_SWITCH
+		snd_soc_jack_notifier_register(&tegra_wm8903_hp_jack,
+						&tegra_wm8903_jack_detect_nb);
+#else
 		snd_soc_jack_add_pins(&tegra_wm8903_hp_jack,
 					ARRAY_SIZE(tegra_wm8903_hp_jack_pins),
 					tegra_wm8903_hp_jack_pins);
+#endif
 		snd_soc_jack_add_gpios(&tegra_wm8903_hp_jack,
 					1,
 					&tegra_wm8903_hp_jack_gpio);
 	}
-
-	snd_soc_jack_new(codec, "Mic Jack", SND_JACK_MICROPHONE,
-			 &tegra_wm8903_mic_jack);
-	snd_soc_jack_add_pins(&tegra_wm8903_mic_jack,
-			      ARRAY_SIZE(tegra_wm8903_mic_jack_pins),
-			      tegra_wm8903_mic_jack_pins);
-	wm8903_mic_detect(codec, &tegra_wm8903_mic_jack, SND_JACK_MICROPHONE,
-				0);
-
-	snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
+/* FIXME */
+// 	snd_soc_jack_new(codec, "Mic Jack", SND_JACK_MICROPHONE,
+// 			 &tegra_wm8903_mic_jack);
+// 	snd_soc_jack_add_pins(&tegra_wm8903_mic_jack,
+// 			      ARRAY_SIZE(tegra_wm8903_mic_jack_pins),
+// 			      tegra_wm8903_mic_jack_pins);
+// 	wm8903_mic_detect(codec, &tegra_wm8903_mic_jack, SND_JACK_MICROPHONE,
+// 				0);
+// 
+// 	snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
 
 	return 0;
 }
@@ -223,25 +365,61 @@ static int tegra_wm8903_remove(struct snd_soc_card *card)
 	return 0;
 }
 
-static struct snd_soc_dai_link tegra_wm8903_dai = {
-	.name = "WM8903",
-	.stream_name = "WM8903 PCM",
-	.codec_name = "wm8903.0-001a",
-	.platform_name = "tegra20-i2s.0",
-	.cpu_dai_name = "tegra20-i2s.0",
-	.codec_dai_name = "wm8903-hifi",
-	.init = tegra_wm8903_init,
-	.ops = &tegra_wm8903_ops,
-	.dai_fmt = SND_SOC_DAIFMT_I2S |
-		   SND_SOC_DAIFMT_NB_NF |
-		   SND_SOC_DAIFMT_CBS_CFS,
+static struct snd_soc_dai_link tegra_wm8903_dai[] = {
+	{
+		.name = "WM8903",
+		.stream_name = "WM8903 PCM",
+		.codec_name = "wm8903.0-001a",
+		.platform_name = "tegra20-i2s.0",
+		.cpu_dai_name = "tegra20-i2s.0",
+		.codec_dai_name = "wm8903-hifi",
+		.init = tegra_wm8903_init,
+		.ops = &tegra_wm8903_ops,
+		.dai_fmt = SND_SOC_DAIFMT_I2S |
+			SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBS_CFS,
+	},
+	{
+		.name = "SPDIF",
+		.stream_name = "SPDIF PCM",
+		.codec_name = "spdif-dit.0",
+		.platform_name = "tegra20-i2s.0",
+		.cpu_dai_name = "tegra20-spdif",
+		.codec_dai_name = "dit-hifi",
+		.ops = &tegra_spdif_ops,
+	},
 };
+
+static int tegra_wm8903_suspend_post(struct snd_soc_card *card)
+{
+	struct snd_soc_jack_gpio *gpio = &tegra_wm8903_hp_jack_gpio;
+
+	if (gpio_is_valid(gpio->gpio))
+		disable_irq(gpio_to_irq(gpio->gpio));
+
+	return 0;
+}
+
+static int tegra_wm8903_resume_pre(struct snd_soc_card *card)
+{
+	struct snd_soc_jack_gpio *gpio = &tegra_wm8903_hp_jack_gpio;
+	int val;
+
+	if (gpio_is_valid(gpio->gpio)) {
+		val = gpio_get_value(gpio->gpio);
+		val = gpio->invert ? !val : val;
+		snd_soc_jack_report(gpio->jack, val, gpio->report);
+		enable_irq(gpio_to_irq(gpio->gpio));
+	}
+
+	return 0;
+}
 
 static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.name = "tegra-wm8903",
 	.owner = THIS_MODULE,
-	.dai_link = &tegra_wm8903_dai,
-	.num_links = 1,
+	.dai_link = tegra_wm8903_dai,
+	.num_links = ARRAY_SIZE(tegra_wm8903_dai),
 
 	.remove = tegra_wm8903_remove,
 
@@ -250,6 +428,9 @@ static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.dapm_widgets = tegra_wm8903_dapm_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(tegra_wm8903_dapm_widgets),
 	.fully_routed = true,
+
+	.suspend_post = tegra_wm8903_suspend_post,
+	.resume_pre = tegra_wm8903_resume_pre,
 };
 
 static int tegra_wm8903_driver_probe(struct platform_device *pdev)
@@ -305,6 +486,13 @@ static int tegra_wm8903_driver_probe(struct platform_device *pdev)
 						"nvidia,ext-mic-en-gpios", 0);
 		if (pdata->gpio_ext_mic_en == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
+
+		machine->dmic_reg = devm_regulator_get(&pdev->dev, "vdd_dmic");
+		if (IS_ERR(machine->dmic_reg)) {
+			dev_info(&pdev->dev, "No digital mic"
+						" regulator found\n");
+			machine->dmic_reg = 0;
+		}
 	}
 
 	if (np) {
@@ -317,29 +505,29 @@ static int tegra_wm8903_driver_probe(struct platform_device *pdev)
 		if (ret)
 			goto err;
 
-		tegra_wm8903_dai.codec_name = NULL;
-		tegra_wm8903_dai.codec_of_node = of_parse_phandle(np,
+		tegra_wm8903_dai[0].codec_name = NULL;
+		tegra_wm8903_dai[0].codec_of_node = of_parse_phandle(np,
 				"nvidia,audio-codec", 0);
-		if (!tegra_wm8903_dai.codec_of_node) {
+		if (!tegra_wm8903_dai[0].codec_of_node) {
 			dev_err(&pdev->dev,
 				"Property 'nvidia,audio-codec' missing or invalid\n");
 			ret = -EINVAL;
 			goto err;
 		}
 
-		tegra_wm8903_dai.cpu_dai_name = NULL;
-		tegra_wm8903_dai.cpu_of_node = of_parse_phandle(np,
+		tegra_wm8903_dai[0].cpu_dai_name = NULL;
+		tegra_wm8903_dai[0].cpu_of_node = of_parse_phandle(np,
 				"nvidia,i2s-controller", 0);
-		if (!tegra_wm8903_dai.cpu_of_node) {
+		if (!tegra_wm8903_dai[0].cpu_of_node) {
 			dev_err(&pdev->dev,
 				"Property 'nvidia,i2s-controller' missing or invalid\n");
 			ret = -EINVAL;
 			goto err;
 		}
 
-		tegra_wm8903_dai.platform_name = NULL;
-		tegra_wm8903_dai.platform_of_node =
-					tegra_wm8903_dai.cpu_of_node;
+		tegra_wm8903_dai[0].platform_name = NULL;
+		tegra_wm8903_dai[0].platform_of_node =
+					tegra_wm8903_dai[0].cpu_of_node;
 	} else {
 		card->dapm_routes = harmony_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(harmony_audio_map);
@@ -387,15 +575,26 @@ static int tegra_wm8903_driver_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
+#ifdef CONFIG_SWITCH
+	/* Add h2w swith class support */
+	ret = switch_dev_register(&tegra_wm8903_hp_switch);
+	if (ret < 0)
+		goto err_fini_utils;
+#endif
+
 	ret = snd_soc_register_card(card);
 	if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
 			ret);
-		goto err_fini_utils;
+		goto err_unregister_switch;
 	}
 
 	return 0;
 
+err_unregister_switch:
+#ifdef CONFIG_SWITCH
+	switch_dev_unregister(&tegra_wm8903_hp_switch);
+#endif
 err_fini_utils:
 	tegra_asoc_utils_fini(&machine->util_data);
 err:
@@ -413,6 +612,10 @@ static int tegra_wm8903_driver_remove(struct platform_device *pdev)
 	snd_soc_unregister_card(card);
 
 	tegra_asoc_utils_fini(&machine->util_data);
+
+#ifdef CONFIG_SWITCH
+	switch_dev_unregister(&tegra_wm8903_hp_switch);
+#endif
 
 	return 0;
 }

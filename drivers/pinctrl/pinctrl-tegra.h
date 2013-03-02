@@ -187,4 +187,11 @@ int tegra_pinctrl_probe(struct platform_device *pdev,
 			const struct tegra_pinctrl_soc_data *soc_data);
 int tegra_pinctrl_remove(struct platform_device *pdev);
 
+#ifdef CONFIG_PM_SLEEP
+extern const struct dev_pm_ops tegra_pinctrl_pm_ops;
+#define TEGRA_PINCTRL_PM	(&tegra_pinctrl_pm_ops)
+#else
+#define TEGRA_PINCTRL_PM	NULL
+#endif
+
 #endif

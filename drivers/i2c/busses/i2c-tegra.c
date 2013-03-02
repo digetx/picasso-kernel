@@ -366,25 +366,25 @@ static void tegra_dvc_init(struct tegra_i2c_dev *i2c_dev)
 static inline int tegra_i2c_clock_enable(struct tegra_i2c_dev *i2c_dev)
 {
 	int ret;
-	ret = clk_prepare_enable(i2c_dev->fast_clk);
+	ret = clk_enable(i2c_dev->fast_clk);
 	if (ret < 0) {
 		dev_err(i2c_dev->dev,
 			"Enabling fast clk failed, err %d\n", ret);
 		return ret;
 	}
-	ret = clk_prepare_enable(i2c_dev->div_clk);
+	ret = clk_enable(i2c_dev->div_clk);
 	if (ret < 0) {
 		dev_err(i2c_dev->dev,
 			"Enabling div clk failed, err %d\n", ret);
-		clk_disable_unprepare(i2c_dev->fast_clk);
+		clk_disable(i2c_dev->fast_clk);
 	}
 	return ret;
 }
 
 static inline void tegra_i2c_clock_disable(struct tegra_i2c_dev *i2c_dev)
 {
-	clk_disable_unprepare(i2c_dev->div_clk);
-	clk_disable_unprepare(i2c_dev->fast_clk);
+	clk_disable(i2c_dev->div_clk);
+	clk_disable(i2c_dev->fast_clk);
 }
 
 static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
@@ -687,11 +687,21 @@ static int tegra_i2c_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "missing controller clock");
 		return PTR_ERR(div_clk);
 	}
+	ret = clk_prepare(div_clk);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to prepare div clk");
+		return ret;
+	}
 
 	fast_clk = devm_clk_get(&pdev->dev, "fast-clk");
 	if (IS_ERR(fast_clk)) {
 		dev_err(&pdev->dev, "missing bus clock");
 		return PTR_ERR(fast_clk);
+	}
+	ret = clk_prepare(fast_clk);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to prepare fast clk");
+		return ret;
 	}
 
 	i2c_dev = devm_kzalloc(&pdev->dev, sizeof(*i2c_dev), GFP_KERNEL);
@@ -772,6 +782,8 @@ static int tegra_i2c_probe(struct platform_device *pdev)
 static int tegra_i2c_remove(struct platform_device *pdev)
 {
 	struct tegra_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
+	clk_unprepare(i2c_dev->div_clk);
+	clk_unprepare(i2c_dev->fast_clk);
 	i2c_del_adapter(&i2c_dev->adapter);
 	return 0;
 }

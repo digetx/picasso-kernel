@@ -48,4 +48,6 @@ obj-y	+= davinci/
 
 obj-$(CONFIG_ARCH_OMAP)	+= omap/
 
+obj-$(CONFIG_ARCH_TEGRA) += tegra/
+
 ccflags-y += -I$(srctree)/drivers/media/i2c

@@ -3737,6 +3737,7 @@ static struct platform_driver tegra30_pinctrl_driver = {
 		.name = "tegra30-pinctrl",
 		.owner = THIS_MODULE,
 		.of_match_table = tegra30_pinctrl_of_match,
+		.pm = TEGRA_PINCTRL_PM,
 	},
 	.probe = tegra30_pinctrl_probe,
 	.remove = tegra_pinctrl_remove,

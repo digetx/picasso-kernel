@@ -587,12 +587,20 @@ static int tegra_ehci_resume(struct device *dev)
 
 static int tegra_ehci_runtime_suspend(struct device *dev)
 {
-	return controller_suspend(dev);
+	struct tegra_ehci_hcd *tegra =
+			platform_get_drvdata(to_platform_device(dev));
+
+	clk_disable_unprepare(tegra->emc_clk);
+
+	return 0;
 }
 
 static int tegra_ehci_runtime_resume(struct device *dev)
 {
-	return controller_resume(dev);
+	struct tegra_ehci_hcd *tegra =
+			platform_get_drvdata(to_platform_device(dev));
+
+	return clk_prepare_enable(tegra->emc_clk);
 }
 
 static const struct dev_pm_ops tegra_ehci_pm_ops = {
@@ -749,7 +757,7 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 	pm_runtime_get_noresume(&pdev->dev);
 
 	/* Don't skip the pm_runtime_forbid call if wakeup isn't working */
-	/* if (!pdata->power_down_on_bus_suspend) */
+	if (!pdata->power_down_on_bus_suspend)
 		pm_runtime_forbid(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);

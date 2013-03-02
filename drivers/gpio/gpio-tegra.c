@@ -31,6 +31,8 @@
 
 #include <asm/mach/irq.h>
 
+#include <mach/pm-irq.h>
+
 #define GPIO_BANK(x)		((x) >> 5)
 #define GPIO_PORT(x)		(((x) >> 3) & 0x3)
 #define GPIO_BIT(x)		((x) & 0x7)
@@ -247,6 +249,8 @@ static int tegra_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	else if (type & (IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
 		__irq_set_handler_locked(d->irq, handle_edge_irq);
 
+	tegra_pm_irq_set_wake_type(d->irq, type);
+
 	return 0;
 }
 
@@ -341,8 +345,17 @@ static int tegra_gpio_suspend(struct device *dev)
 static int tegra_gpio_wake_enable(struct irq_data *d, unsigned int enable)
 {
 	struct tegra_gpio_bank *bank = irq_data_get_irq_chip_data(d);
+	int ret;
+
+	ret = tegra_pm_irq_set_wake(d->irq, enable);
+	if (ret)
+		return ret;
+
 	return irq_set_irq_wake(bank->irq, enable);
 }
+#else
+#define tegra_gpio_suspend	NULL
+#define tegra_gpio_resume	NULL
 #endif
 
 static struct irq_chip tegra_gpio_irq_chip = {
@@ -357,7 +370,8 @@ static struct irq_chip tegra_gpio_irq_chip = {
 };
 
 static const struct dev_pm_ops tegra_gpio_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(tegra_gpio_suspend, tegra_gpio_resume)
+	.suspend_noirq = tegra_gpio_suspend,
+	.resume_noirq  = tegra_gpio_resume,
 };
 
 struct tegra_gpio_soc_config {

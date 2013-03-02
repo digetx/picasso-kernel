@@ -19,6 +19,10 @@
 
 #include "iomap.h"
 
+#define TEGRA_IRAM_CODE_AREA	(TEGRA_IRAM_BASE + SZ_4K)
+
+#define TEGRA_PMC_VIRT	(TEGRA_PMC_BASE - IO_APB_PHYS + IO_APB_VIRT)
+
 #define TEGRA_ARM_PERIF_VIRT (TEGRA_ARM_PERIF_BASE - IO_CPU_PHYS \
 					+ IO_CPU_VIRT)
 #define TEGRA_FLOW_CTRL_VIRT (TEGRA_FLOW_CTRL_BASE - IO_PPSB_PHYS \
@@ -117,6 +121,10 @@ static inline void tegra30_hotplug_init(void) {}
 
 int tegra30_sleep_cpu_secondary_finish(unsigned long);
 void tegra30_tear_down_cpu(void);
+
+void tegra20_sleep_core_finish(unsigned long v2p);
+extern void tegra20_iram_start(void);
+extern void tegra20_iram_end(void);
 
 #endif
 #endif

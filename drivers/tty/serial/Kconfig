@@ -1447,4 +1447,13 @@ config SERIAL_ARC_NR_PORTS
 	  Set this to the number of serial ports you want the driver
 	  to support.
 
+config SERIAL_TEGRA
+	boolean "High speed serial support for NVIDIA Tegra SoCs"
+	depends on ARCH_TEGRA && TEGRA20_APB_DMA
+	select SERIAL_CORE
+	help
+	  Support for the on-chip UARTs on NVIDIA Tegra SoC, providing
+	  /dev/ttyHSx, where x is determined by the number of UARTs on the
+	  platform
+
 endmenu

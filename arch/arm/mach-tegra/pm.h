@@ -32,4 +32,24 @@ bool tegra_set_cpu_in_lp2(int phy_cpu_id);
 void tegra_idle_lp2_last(u32 cpu_on_time, u32 cpu_off_time);
 extern void (*tegra_tear_down_cpu)(void);
 
+#ifdef CONFIG_PM_SLEEP
+struct suspend_params {
+	unsigned long core_timer;	/* core power good time in ticks, LP0 */
+	unsigned long core_off_timer;	/* core power off time ticks, LP0 */
+	bool corereq_high;	/* Core power request active-high */
+	bool sysclkreq_high;	/* System clock request is active-high */
+	bool combined_req;	/* if core & CPU power requests are combined */
+};
+
+void tegra_init_suspend(struct suspend_params *sparams);
+void tegra2_lp0_suspend_init(void);
+void tegra_timer_suspend(void);
+void tegra_timer_resume(void);
+void pmc_32kwritel(u32 val, unsigned long offs);
+void tegra_cpu_reset_handler_save(void);
+void tegra_cpu_reset_handler_restore(void);
+#else
+#define tegra_init_suspend() do {} while(0)
+#endif
+
 #endif /* _MACH_TEGRA_PM_H_ */

@@ -33,6 +33,9 @@
 #define TEGRA_USB_BASE		0xC5000000
 #define TEGRA_USB_SIZE		SZ_16K
 
+#define TEGRA_AHB_GIZMO_BASE	0x6000C004
+#define TEGRA_AHB_GIZMO_SIZE	0x10C
+
 #define ULPI_VIEWPORT		0x170
 
 #define USB_PORTSC1		0x184
@@ -140,6 +143,10 @@
 #define UTMIP_BIAS_CFG1		0x83c
 #define   UTMIP_BIAS_PDTRK_COUNT(x)	(((x) & 0x1f) << 3)
 
+#define AHB_MEM_PREFETCH_CFG1		0xec
+#define   AHB_MEM_PREFETCH_CFG2		0xf0
+#define   PREFETCH_ENB			(1 << 31)
+
 static DEFINE_SPINLOCK(utmip_pad_lock);
 static int utmip_pad_count;
 
@@ -223,6 +230,10 @@ static int utmip_pad_open(struct tegra_usb_phy *phy)
 
 	if (phy->instance == 0) {
 		phy->pad_regs = phy->regs;
+
+		if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE)
+			phy->ahb_gizmo = ioremap(TEGRA_AHB_GIZMO_BASE,
+						 TEGRA_AHB_GIZMO_SIZE);
 	} else {
 		phy->pad_regs = ioremap(TEGRA_USB_BASE, TEGRA_USB_SIZE);
 		if (!phy->pad_regs) {
@@ -238,6 +249,8 @@ static void utmip_pad_close(struct tegra_usb_phy *phy)
 {
 	if (phy->instance != 0)
 		iounmap(phy->pad_regs);
+	else if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE)
+		iounmap(phy->ahb_gizmo);
 	clk_put(phy->pad_clk);
 }
 
@@ -702,6 +715,13 @@ static void tegra_usb_phy_close(struct usb_phy *x)
 		clk_put(phy->clk);
 	else
 		utmip_pad_close(phy);
+
+	if (phy->vdd_reg) {
+		if (phy->vdd_reg_on)
+			regulator_disable(phy->vdd_reg);
+		regulator_put(phy->vdd_reg);
+	}
+
 	clk_disable_unprepare(phy->pll_u);
 	clk_put(phy->pll_u);
 	kfree(phy);
@@ -709,6 +729,11 @@ static void tegra_usb_phy_close(struct usb_phy *x)
 
 static int tegra_usb_phy_power_on(struct tegra_usb_phy *phy)
 {
+	if (phy->vdd_reg && !phy->vdd_reg_on) {
+		regulator_enable(phy->vdd_reg);
+		phy->vdd_reg_on = true;
+	}
+
 	if (phy_is_ulpi(phy))
 		return ulpi_phy_power_on(phy);
 	else
@@ -721,6 +746,11 @@ static int tegra_usb_phy_power_off(struct tegra_usb_phy *phy)
 		return ulpi_phy_power_off(phy);
 	else
 		return utmi_phy_power_off(phy);
+
+	if (phy->vdd_reg && phy->vdd_reg_on) {
+		regulator_disable(phy->vdd_reg);
+		phy->vdd_reg_on = false;
+	}
 }
 
 static int	tegra_usb_phy_suspend(struct usb_phy *x, int suspend)
@@ -744,17 +774,27 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	if (!phy)
 		return ERR_PTR(-ENOMEM);
 
+	phy->vdd_reg = regulator_get(dev, "vusb");
+	if (IS_ERR(phy->vdd_reg)) {
+		pr_err("Can't get regulator avdd_usb*\n");
+		err = PTR_ERR(phy->vdd_reg);
+		goto err0;
+	}
+
+	regulator_enable(phy->vdd_reg);
+
 	phy->instance = instance;
 	phy->regs = regs;
 	phy->config = config;
 	phy->mode = phy_mode;
 	phy->dev = dev;
+	phy->vdd_reg_on = true;
 
 	if (!phy->config) {
 		if (phy_is_ulpi(phy)) {
 			pr_err("%s: ulpi phy configuration missing", __func__);
 			err = -EINVAL;
-			goto err0;
+			goto err1;
 		} else {
 			phy->config = &utmip_default[instance];
 		}
@@ -764,7 +804,7 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	if (IS_ERR(phy->pll_u)) {
 		pr_err("Can't get pll_u clock\n");
 		err = PTR_ERR(phy->pll_u);
-		goto err0;
+		goto err1;
 	}
 	clk_prepare_enable(phy->pll_u);
 
@@ -778,7 +818,7 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	if (!phy->freq) {
 		pr_err("invalid pll_u parent rate %ld\n", parent_rate);
 		err = -EINVAL;
-		goto err1;
+		goto err2;
 	}
 
 	phy->u_phy.init = tegra_phy_init;
@@ -787,9 +827,12 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 
 	return phy;
 
-err1:
+err2:
 	clk_disable_unprepare(phy->pll_u);
 	clk_put(phy->pll_u);
+err1:
+	regulator_disable(phy->vdd_reg);
+	regulator_put(phy->vdd_reg);
 err0:
 	kfree(phy);
 	return ERR_PTR(err);
@@ -838,3 +881,33 @@ void tegra_usb_phy_clk_enable(struct tegra_usb_phy *phy)
 		utmi_phy_clk_enable(phy);
 }
 EXPORT_SYMBOL_GPL(tegra_usb_phy_clk_enable);
+
+void tegra_usb_phy_memory_prefetch_on(struct tegra_usb_phy *phy)
+{
+	unsigned long val;
+
+	if (phy->instance == 0 && phy->mode == TEGRA_USB_PHY_MODE_DEVICE) {
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val |= PREFETCH_ENB;
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+		val |= PREFETCH_ENB;
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+	}
+}
+EXPORT_SYMBOL_GPL(tegra_usb_phy_memory_prefetch_on);
+
+void tegra_usb_phy_memory_prefetch_off(struct tegra_usb_phy *phy)
+{
+	unsigned long val;
+
+	if (phy->instance == 0 && phy->mode == TEGRA_USB_PHY_MODE_DEVICE) {
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val &= ~(PREFETCH_ENB);
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+		val &= ~(PREFETCH_ENB);
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+	}
+}
+EXPORT_SYMBOL_GPL(tegra_usb_phy_memory_prefetch_off);

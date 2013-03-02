@@ -459,6 +459,12 @@ config LEDS_BLINKM
 	  This option enables support for the BlinkM RGB LED connected
 	  through I2C. Say Y to enable support for the BlinkM LED.
 
+config LEDS_EC
+	tristate "LED support for acer a50x tablets"
+	depends on LEDS_CLASS && MFD_EC_CONTROL
+	help
+	  This option enables support for acer a50x tablets.
+
 config LEDS_TRIGGERS
 	bool "LED Trigger support"
 	depends on LEDS_CLASS

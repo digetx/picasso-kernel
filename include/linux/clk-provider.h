@@ -27,6 +27,8 @@
 #define CLK_IS_ROOT		BIT(4) /* root clk, has no parent */
 #define CLK_IS_BASIC		BIT(5) /* Basic clk, can't do a to_clk_foo() */
 #define CLK_GET_RATE_NOCACHE	BIT(6) /* do not use the cached clk rate */
+#define CLK_SET_RATE_NOCACHE	BIT(7) /* do not use the cached clk rate */
+#define CLK_NO_CHILD_RECALC	BIT(8) /* do not recalc child's */
 
 struct clk_hw;
 
@@ -353,6 +355,7 @@ unsigned long __clk_get_rate(struct clk *clk);
 unsigned long __clk_get_flags(struct clk *clk);
 bool __clk_is_enabled(struct clk *clk);
 struct clk *__clk_lookup(const char *name);
+int __clk_set_rate(struct clk *clk, unsigned long rate);
 
 /*
  * FIXME clock api without lock protection

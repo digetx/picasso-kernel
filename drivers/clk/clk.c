@@ -491,6 +491,42 @@ static void __clk_disable(struct clk *clk)
 }
 
 /**
+ * __clk_notify - call clk notifier chain
+ * @clk: struct clk * that is changing rate
+ * @msg: clk notifier type (see include/linux/clk.h)
+ * @old_rate: old clk rate
+ * @new_rate: new clk rate
+ *
+ * Triggers a notifier call chain on the clk rate-change notification
+ * for 'clk'.  Passes a pointer to the struct clk and the previous
+ * and current rates to the notifier callback.  Intended to be called by
+ * internal clock code only.  Returns NOTIFY_DONE from the last driver
+ * called if all went well, or NOTIFY_STOP or NOTIFY_BAD immediately if
+ * a driver returns that.
+ */
+static int __clk_notify(struct clk *clk, unsigned long msg,
+		unsigned long old_rate, unsigned long new_rate)
+{
+	struct clk_notifier *cn;
+	struct clk_notifier_data cnd;
+	int ret = NOTIFY_DONE;
+
+	cnd.clk = clk;
+	cnd.old_rate = old_rate;
+	cnd.new_rate = new_rate;
+
+	list_for_each_entry(cn, &clk_notifier_list, node) {
+		if (cn->clk == clk) {
+			ret = srcu_notifier_call_chain(&cn->notifier_head, msg,
+					&cnd);
+			break;
+		}
+	}
+
+	return ret;
+}
+
+/**
  * clk_disable - gate a clock
  * @clk: the clk being gated
  *
@@ -509,6 +545,8 @@ void clk_disable(struct clk *clk)
 	spin_lock_irqsave(&enable_lock, flags);
 	__clk_disable(clk);
 	spin_unlock_irqrestore(&enable_lock, flags);
+
+	__clk_notify(clk, POST_DISABLE_CHANGE, clk->rate, clk->rate);
 }
 EXPORT_SYMBOL_GPL(clk_disable);
 
@@ -558,6 +596,8 @@ int clk_enable(struct clk *clk)
 {
 	unsigned long flags;
 	int ret;
+
+	__clk_notify(clk, PRE_ENABLE_CHANGE, clk->rate, clk->rate);
 
 	spin_lock_irqsave(&enable_lock, flags);
 	ret = __clk_enable(clk);
@@ -613,42 +653,6 @@ long clk_round_rate(struct clk *clk, unsigned long rate)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clk_round_rate);
-
-/**
- * __clk_notify - call clk notifier chain
- * @clk: struct clk * that is changing rate
- * @msg: clk notifier type (see include/linux/clk.h)
- * @old_rate: old clk rate
- * @new_rate: new clk rate
- *
- * Triggers a notifier call chain on the clk rate-change notification
- * for 'clk'.  Passes a pointer to the struct clk and the previous
- * and current rates to the notifier callback.  Intended to be called by
- * internal clock code only.  Returns NOTIFY_DONE from the last driver
- * called if all went well, or NOTIFY_STOP or NOTIFY_BAD immediately if
- * a driver returns that.
- */
-static int __clk_notify(struct clk *clk, unsigned long msg,
-		unsigned long old_rate, unsigned long new_rate)
-{
-	struct clk_notifier *cn;
-	struct clk_notifier_data cnd;
-	int ret = NOTIFY_DONE;
-
-	cnd.clk = clk;
-	cnd.old_rate = old_rate;
-	cnd.new_rate = new_rate;
-
-	list_for_each_entry(cn, &clk_notifier_list, node) {
-		if (cn->clk == clk) {
-			ret = srcu_notifier_call_chain(&cn->notifier_head, msg,
-					&cnd);
-			break;
-		}
-	}
-
-	return ret;
-}
 
 /**
  * __clk_recalc_rates
@@ -827,7 +831,8 @@ static struct clk *clk_calc_new_rates(struct clk *clk, unsigned long rate)
 	}
 
 out:
-	clk_calc_subtree(clk, new_rate);
+	if (!(clk->flags & CLK_NO_CHILD_RECALC))
+		clk_calc_subtree(clk, new_rate);
 
 	return top;
 }
@@ -913,16 +918,13 @@ static void clk_change_rate(struct clk *clk)
  *
  * Returns 0 on success, -EERROR otherwise.
  */
-int clk_set_rate(struct clk *clk, unsigned long rate)
+int __clk_set_rate(struct clk *clk, unsigned long rate)
 {
 	struct clk *top, *fail_clk;
 	int ret = 0;
 
-	/* prevent racing with updates to the clock topology */
-	mutex_lock(&prepare_lock);
-
 	/* bail early if nothing to do */
-	if (rate == clk->rate)
+	if (!(clk->flags & CLK_SET_RATE_NOCACHE) && rate == clk->rate)
 		goto out;
 
 	if ((clk->flags & CLK_SET_RATE_GATE) && clk->prepare_count) {
@@ -950,10 +952,21 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 	/* change the rates */
 	clk_change_rate(top);
 
-	mutex_unlock(&prepare_lock);
-
 	return 0;
 out:
+
+	return ret;
+}
+
+int clk_set_rate(struct clk *clk, unsigned long rate)
+{
+	int ret;
+
+	/* prevent racing with updates to the clock topology */
+	mutex_lock(&prepare_lock);
+
+	ret = __clk_set_rate(clk, rate);
+
 	mutex_unlock(&prepare_lock);
 
 	return ret;

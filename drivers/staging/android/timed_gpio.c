@@ -20,6 +20,7 @@
 #include <linux/hrtimer.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
+#include <linux/of_gpio.h>
 
 #include "timed_output.h"
 #include "timed_gpio.h"
@@ -80,12 +81,54 @@ static void gpio_enable(struct timed_output_dev *dev, int value)
 	spin_unlock_irqrestore(&data->lock, flags);
 }
 
+static struct timed_gpio_platform_data *timed_gpio_dt_parse_pdata(
+	struct platform_device *pdev)
+{
+	struct device_node *child, *np = pdev->dev.of_node;
+	struct timed_gpio_platform_data *pdata;
+	struct timed_gpio *gpios;
+	enum of_gpio_flags flags;
+	int val, num_gpios;
+
+	num_gpios = of_get_child_count(np);
+	if (!num_gpios)
+		return NULL;
+
+	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+	gpios = devm_kzalloc(&pdev->dev, sizeof(*gpios) * num_gpios, GFP_KERNEL);
+
+	if (!pdata || !gpios) {
+		dev_err(&pdev->dev, "Can't allocate platform data\n");
+		return NULL;
+	}
+
+	pdata->num_gpios = num_gpios;
+	pdata->gpios = gpios;
+
+	for_each_child_of_node(np, child) {
+		gpios[--num_gpios].gpio =
+			of_get_named_gpio_flags(child, "gpio", 0, &flags);
+
+		of_property_read_string(child, "name", &gpios[num_gpios].name);
+
+		if (!of_property_read_u32(child, "max-timeout", &val))
+			gpios[num_gpios].max_timeout = val;
+
+		gpios[num_gpios].active_low = !!(flags & OF_GPIO_ACTIVE_LOW);
+	}
+
+	return pdata;
+}
+
 static int timed_gpio_probe(struct platform_device *pdev)
 {
 	struct timed_gpio_platform_data *pdata = pdev->dev.platform_data;
 	struct timed_gpio *cur_gpio;
 	struct timed_gpio_data *gpio_data, *gpio_dat;
 	int i, ret;
+
+	if (!pdata && pdev->dev.of_node)
+		pdata = timed_gpio_dt_parse_pdata(pdev);
 
 	if (!pdata)
 		return -EBUSY;
@@ -152,12 +195,19 @@ static int timed_gpio_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static struct of_device_id timed_gpio_of_match[] = {
+	{ .compatible = "android,timed-gpio", },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, timed_gpio_of_match);
+
 static struct platform_driver timed_gpio_driver = {
 	.probe		= timed_gpio_probe,
 	.remove		= timed_gpio_remove,
 	.driver		= {
 		.name		= TIMED_GPIO_NAME,
 		.owner		= THIS_MODULE,
+		.of_match_table = of_match_ptr(timed_gpio_of_match),
 	},
 };
 

@@ -52,4 +52,5 @@ obj-$(CONFIG_ALTERA_STAPL)	+=altera-stapl/
 obj-$(CONFIG_INTEL_MEI)		+= mei/
 obj-$(CONFIG_WL127X_RFKILL)	+= wl127x-rfkill.o
 obj-$(CONFIG_SENSORS_AK8975)	+= akm8975.o
-
+obj-$(CONFIG_AL3000A_LIGHT_SENSOR) += al3000a.o
+obj-y				+= mpu3050/inv_330/

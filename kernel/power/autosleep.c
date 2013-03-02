@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/pm_wakeup.h>
+#include <linux/earlysuspend.h>
 
 #include "power.h"
 
@@ -100,6 +101,9 @@ int pm_autosleep_set_state(suspend_state_t state)
 	autosleep_state = state;
 
 	__pm_relax(autosleep_ws);
+
+	if (IS_ENABLED(CONFIG_PM_EARLYSUSPEND))
+		pm_request_early_suspend_state(state);
 
 	if (state > PM_SUSPEND_ON) {
 		pm_wakep_autosleep_enabled(true);

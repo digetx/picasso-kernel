@@ -1,5 +1,5 @@
 /*
- * drivers/regulator/tegra-regulator.c
+ * arch/arm/mach-tegra/include/mach/powergate.h
  *
  * Copyright (c) 2010 Google, Inc
  *
@@ -47,6 +47,26 @@ int tegra_powergate_is_powered(int id);
 int tegra_powergate_power_on(int id);
 int tegra_powergate_power_off(int id);
 int tegra_powergate_remove_clamping(int id);
+
+int tegra_powergate_mc_disable(int id);
+int tegra_powergate_mc_enable(int id);
+int tegra_powergate_mc_flush(int id);
+int tegra_powergate_mc_flush_done(int id);
+
+/*
+ * Functions to powergate un-powergate partitions.
+ * Drivers are responsible for clk enable-disable
+ *
+ * tegra_powergate_partition() should be called with all
+ * required clks OFF. Drivers should disable clks BEFORE
+ * calling this fucntion
+ *
+ * tegra_unpowergate_partition should be called with all
+ * required clks OFF. Returns with all clks OFF. Drivers
+ * should enable all clks AFTER this function
+ */
+int tegra_powergate_partition(int id);
+int tegra_unpowergate_partition(int id);
 
 /* Must be called with clk disabled, and returns with clk enabled */
 int tegra_powergate_sequence_power_up(int id, struct clk *clk);

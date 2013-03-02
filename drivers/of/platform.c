@@ -22,6 +22,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/nvhost.h>
 
 const struct of_device_id of_default_bus_match_table[] = {
 	{ .compatible = "simple-bus", },
@@ -338,6 +339,39 @@ static const struct of_dev_auxdata *of_dev_lookup(const struct of_dev_auxdata *l
 }
 
 /**
+ * Assume that all child devices belongs to nvhost
+ */
+static int of_nvhost_bus_create(struct device_node *bus,
+				const struct of_dev_auxdata *lookup)
+{
+	const struct of_dev_auxdata *auxdata;
+	struct device_node *child;
+	const char *bus_id = NULL;
+	void *platform_data = NULL;
+	int rc;
+
+	auxdata = of_dev_lookup(lookup, bus);
+	if (auxdata) {
+		bus_id = auxdata->name;
+		platform_data = auxdata->platform_data;
+	}
+
+	pr_debug("   nvhost create host: %s\n", bus->full_name);
+	rc = of_nvhost_device_create(bus, bus_id, platform_data);
+	if (rc)
+		return rc;
+
+	for_each_child_of_node(bus, child) {
+		pr_debug("   nvhost create child: %s\n", child->full_name);
+		rc = of_nvhost_bus_create(child, lookup);
+		if (rc)
+			of_node_put(child);
+	}
+
+	return rc;
+}
+
+/**
  * of_platform_bus_create() - Create a device for a node and its children.
  * @bus: device node of the bus to instantiate
  * @matches: match table for bus nodes
@@ -378,6 +412,11 @@ static int of_platform_bus_create(struct device_node *bus,
 		return 0;
 	}
 
+	if (of_device_is_compatible(bus, "nvhost-bus")) {
+		of_nvhost_bus_create(bus, lookup);
+		return 0;
+	}
+
 	dev = of_platform_device_create_pdata(bus, bus_id, platform_data, parent);
 	if (!dev || !of_match_node(matches, bus))
 		return 0;
@@ -390,6 +429,7 @@ static int of_platform_bus_create(struct device_node *bus,
 			break;
 		}
 	}
+
 	return rc;
 }
 
