@@ -188,10 +188,13 @@ struct drm_i915_error_state {
 	u32 pgtbl_er;
 	u32 ier;
 	u32 ccid;
+	u32 derrmr;
+	u32 forcewake;
 	bool waiting[I915_NUM_RINGS];
 	u32 pipestat[I915_MAX_PIPES];
 	u32 tail[I915_NUM_RINGS];
 	u32 head[I915_NUM_RINGS];
+	u32 ctl[I915_NUM_RINGS];
 	u32 ipeir[I915_NUM_RINGS];
 	u32 ipehr[I915_NUM_RINGS];
 	u32 instdone[I915_NUM_RINGS];
@@ -916,7 +919,7 @@ typedef struct drm_i915_private {
 	bool hw_contexts_disabled;
 	uint32_t hw_context_size;
 
-	bool fdi_rx_polarity_reversed;
+	u32 fdi_rx_config;
 
 	struct i915_suspend_saved_registers regfile;
 
