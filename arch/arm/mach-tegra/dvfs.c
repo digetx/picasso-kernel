@@ -350,7 +350,6 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 		if (IS_ERR(client->clk)) {
 			dev_err(dvfs_dev, "Can't get %s clk\n",
 				client->clk_name);
-			devm_clk_put(dvfs_dev, client->clk);
 			client->clk = NULL;
 			continue;
 		}
