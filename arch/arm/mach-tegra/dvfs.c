@@ -11,8 +11,10 @@
 
 #include <linux/module.h>
 #include <linux/of_device.h>
+#include <linux/cpufreq.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/workqueue.h>
 #include <linux/regulator/consumer.h>
 #include <linux/clk-provider.h>
 
@@ -24,44 +26,44 @@ static struct regulator *cpu_reg, *core_reg, *rtc_reg;
 struct dvfs_domain;
 
 struct dvfs_client {
+	struct delayed_work work;
 	struct dvfs_domain *dvfs;
 	struct notifier_block nb;
 	struct list_head node;
+	struct mutex	deferred_work_lock;
 	struct clk	*clk;
 	const char	*clk_name;
-	unsigned	*freqs;
-	unsigned	freqs_nb;
+	bool		work_scheduled;
+	int		*freqs;
 	unsigned	index;
 };
 
 struct dvfs_domain {
 	struct list_head active_clients;
 	struct dvfs_client **clients;
-	unsigned	clients_nb;
-	unsigned	*voltages_mv;
-	unsigned	voltages_nb;
+	int	*voltages_mv;
 };
 
 #define DVFS_CLIENT(_name, _freqs)					\
-		static unsigned dvfs_##_name##_f[] = { _freqs };	\
-		static struct dvfs_client dvfs_##_name##_client = {	\
-			.clk = NULL,					\
-			.clk_name = #_name,				\
-			.freqs = dvfs_##_name##_f,			\
-			.freqs_nb = ARRAY_SIZE(dvfs_##_name##_f),	\
-		}
+	static int dvfs_##_name##_f[] = { _freqs, -1 };			\
+	static struct dvfs_client dvfs_##_name##_client = {		\
+		.clk = NULL,						\
+		.clk_name = #_name,					\
+		.freqs = dvfs_##_name##_f,				\
+	}
 
 #define DVFS(_name, _voltages, _client...)				\
-		static unsigned dvfs_##_name##_v[] = { _voltages };	\
-		static struct dvfs_client *dvfs_##_name##_clients[] = {	\
-			_client,					\
-		};							\
-		static struct dvfs_domain dvfs_##_name = {		\
-			.clients = dvfs_##_name##_clients,		\
-			.clients_nb = ARRAY_SIZE(dvfs_##_name##_clients),\
-			.voltages_mv = dvfs_##_name##_v,		\
-			.voltages_nb = ARRAY_SIZE(dvfs_##_name##_v),	\
-		}
+	static int dvfs_##_name##_v[] = { _voltages, };			\
+	static struct dvfs_client *dvfs_##_name##_clients[] = {		\
+		_client, NULL						\
+	};								\
+	static struct dvfs_domain dvfs_##_name = {			\
+		.clients = dvfs_##_name##_clients,			\
+		.voltages_mv = dvfs_##_name##_v,			\
+	}
+
+#define _100uV			100000
+#define _170uV			170000
 
 /* cpu domain defines */
 #define CPU_MAX_VDD		1125
@@ -70,12 +72,12 @@ struct dvfs_domain {
 #define CPU_MILLIVOLTS		750,	775,	825,	875,	925, \
 				950,	1000,	1100,	CPU_MAX_VDD
 
-#define CPU_FREQS		216000,	312000,	456000,	608000,	750000, \
-				760000,	816000,	912000,	1000000
+#define CPU_FREQS		216,	312,	456,	608,	750, \
+				760,	816,	912,	1000
 
 /* core domain defines */
 #define CORE_MAX_VDD		1300
-#define CORE_NOMINAL_VDD	1200
+#define CORE_NOMINAL_VDD	1225
 
 #define CORE_MILLIVOLTS		1000,	1050,	1100,	1150, \
 				1200,	1225,	1275,	CORE_MAX_VDD
@@ -118,7 +120,7 @@ struct dvfs_domain {
 #define USB3_FREQS		400000,	400000,	400000,	480000
 
 /* rtc domain defines */
-#define RTC_MAX_VDD		1200
+#define RTC_MAX_VDD		1300
 #define RTC_MIN_VDD		950
 #define RTC_NOMINAL_VDD		RTC_MAX_VDD
 
@@ -186,11 +188,49 @@ static void dvfs_update_rtc_voltage(int new_uV)
 		dev_err(dvfs_dev, "failed update rtc voltage\n");
 }
 
+#define UPDATE_STEP	150000
+static void update_core_vdd(int new_core_vdd)
+{
+	int current_rtc_vdd = regulator_get_voltage(rtc_reg);
+	int current_core_vdd = regulator_get_voltage(core_reg);
+	int core_rtc_delta = new_core_vdd - current_rtc_vdd;
+
+	if (abs(core_rtc_delta) > _170uV) {
+		int update_step, steps_nb, new_rtc_vdd, rtc_vdd_limit;
+
+		if (current_rtc_vdd != current_core_vdd)
+			dvfs_update_rtc_voltage(current_core_vdd);
+
+		if (core_rtc_delta > 0) {
+			rtc_vdd_limit = RTC_MAX_VDD * 1000;
+			update_step = UPDATE_STEP;
+		} else {
+			rtc_vdd_limit = RTC_MIN_VDD * 1000;
+			update_step = -UPDATE_STEP;
+		}
+
+		new_rtc_vdd = max(new_core_vdd, rtc_vdd_limit);
+		steps_nb = abs(current_rtc_vdd - new_rtc_vdd) / UPDATE_STEP - 1;
+
+		dev_dbg(dvfs_dev, "steps_nb = %d\n", steps_nb);
+
+		do {
+			current_core_vdd += update_step;
+			dvfs_update_rtc_voltage(current_core_vdd);
+			dvfs_update_core_voltage(current_core_vdd);
+		} while (--steps_nb > 0);
+	}
+
+	if (current_core_vdd != new_core_vdd)
+		dvfs_update_core_voltage(new_core_vdd);
+}
+
 static void dvfs_set_nominal_voltages(void)
 {
-	dvfs_update_core_voltage(CORE_NOMINAL_VDD * 1000);
-	dvfs_update_rtc_voltage(RTC_NOMINAL_VDD * 1000);
-	dvfs_update_cpu_voltage(CPU_NOMINAL_VDD * 1000);
+	update_core_vdd(CORE_NOMINAL_VDD * 1000);
+
+	if (regulator_get_voltage(cpu_reg) != CPU_NOMINAL_VDD * 1000)
+		dvfs_update_cpu_voltage(CPU_NOMINAL_VDD * 1000);
 }
 
 /*
@@ -200,9 +240,10 @@ static void dvfs_set_nominal_voltages(void)
  */
 static void update_voltages(void)
 {
-	struct dvfs_client *client;
+	struct dvfs_client *client, *cpu_client = dvfs_cpu.clients[0];
 	unsigned dvfs_core_index = 0, dvfs_cpu_index;
-	int new_cpu_vdd, new_core_vdd, new_rtc_vdd, rtc_vdd_mid;
+	int new_cpu_vdd, new_core_vdd;
+	int current_cpu_vdd;
 
 	if (!dvfs_enabled)
 		return;
@@ -216,16 +257,9 @@ static void update_voltages(void)
 		dvfs_core_index = max(client->index, dvfs_core_index);
 	}
 
-	if (dvfs_core_index >= dvfs_core.voltages_nb) {
-		dev_err(dvfs_dev, "Invalid core index = %d\n", dvfs_core_index);
-		dvfs_core_index = dvfs_core.voltages_nb - 1;
-	}
+	dvfs_cpu_index = cpu_client->index;
 
-	dvfs_cpu_index = dvfs_cpu.clients[0]->index;
-	if (dvfs_cpu_index >= dvfs_cpu.voltages_nb) {
-		dev_err(dvfs_dev, "Invalid cpu index = %d\n", dvfs_cpu_index);
-		dvfs_cpu_index = dvfs_cpu.voltages_nb - 1;
-	}
+	dev_dbg(dvfs_dev, "cpu client index = %d\n", dvfs_cpu_index);
 
 	/*
 	 * Get current local vdd's vals
@@ -236,35 +270,27 @@ static void update_voltages(void)
 
 	/*
 	 * Recalc vdd's according to rules
-	 * NOTE: should be reworked to support wider range
 	 */
-	if (new_core_vdd - new_cpu_vdd < 100000)
-		new_core_vdd = new_cpu_vdd + 100000;
-
-	new_rtc_vdd = regulator_get_voltage(rtc_reg);
-
-	if (abs(new_rtc_vdd - new_core_vdd) > 170000) {
-		rtc_vdd_mid = new_rtc_vdd;
-		new_rtc_vdd = min(new_core_vdd, RTC_MAX_VDD * 1000);
-		rtc_vdd_mid = (new_rtc_vdd - rtc_vdd_mid) > 0 ? -85000 : 85000;
-		rtc_vdd_mid = max(new_rtc_vdd + rtc_vdd_mid, RTC_MIN_VDD * 1000);
-	} else
-		new_rtc_vdd = 0;
+	if (new_core_vdd - new_cpu_vdd < _100uV)
+		new_core_vdd = new_cpu_vdd + _100uV;
 
 	/*
 	 * Perform regulators update
 	 */
-	if (new_rtc_vdd)
-		dvfs_update_rtc_voltage(rtc_vdd_mid);
+	current_cpu_vdd = regulator_get_voltage(cpu_reg);
 
-	if (regulator_get_voltage(core_reg) != new_core_vdd)
-		dvfs_update_core_voltage(new_core_vdd);
-
-	if (new_rtc_vdd)
-		dvfs_update_rtc_voltage(new_rtc_vdd);
-
-	if (regulator_get_voltage(cpu_reg) != new_cpu_vdd)
-		dvfs_update_cpu_voltage(new_cpu_vdd);
+	/*
+	 * Who goes update first?
+	 */
+	if (new_core_vdd - current_cpu_vdd < _100uV) {
+		if (current_cpu_vdd != new_cpu_vdd)
+			dvfs_update_cpu_voltage(new_cpu_vdd);
+		update_core_vdd(new_core_vdd);
+	} else {
+		update_core_vdd(new_core_vdd);
+		if (current_cpu_vdd != new_cpu_vdd)
+			dvfs_update_cpu_voltage(new_cpu_vdd);
+	}
 }
 
 /*
@@ -272,18 +298,94 @@ static void update_voltages(void)
  */
 static void update_freq_index(struct dvfs_client *c, unsigned long freq)
 {
-	for (c->index = 0; c->index < c->freqs_nb - 1; c->index++)
+	for (c->index = 0; c->freqs[c->index + 1] > 0; c->index++)
 		if (c->freqs[c->index] * 1000 >= freq)
 			break;
 }
 
-static int dvfs_clk_change_notify(struct notifier_block *nb,
+static int dvfs_cpu_change_notify(struct notifier_block *nb,
 				  unsigned long flags, void *data)
 {
 	struct dvfs_client *client = container_of(nb, struct dvfs_client, nb);
-	struct clk_notifier_data *cnd = data;
+	struct cpufreq_freqs *freqs = data;
 
-	mutex_lock(&dvfs_lock);
+	/*
+	 * Ignore duplicated notify
+	 */
+	if (freqs->cpu > 0)
+		return NOTIFY_OK;
+
+	switch (flags) {
+	case CPUFREQ_PRECHANGE:
+		/*
+		 * Perform update before going from low to high
+		 */
+		if (freqs->new > freqs->old) {
+			dev_dbg(dvfs_dev, "%s PRE rate change %d -> %d\n",
+				client->clk_name, freqs->old, freqs->new);
+
+			mutex_lock(&dvfs_lock);
+
+			update_freq_index(client, freqs->new);
+			update_voltages();
+
+			mutex_unlock(&dvfs_lock);
+		}
+		break;
+
+	case CPUFREQ_POSTCHANGE:
+		/*
+		 * Perform update after going from high to low
+		 */
+		if (freqs->new < freqs->old) {
+			dev_dbg(dvfs_dev, "%s POST rate change %d -> %d\n",
+				client->clk_name, freqs->old, freqs->new);
+
+			mutex_lock(&dvfs_lock);
+
+			update_freq_index(client, freqs->new);
+			update_voltages();
+
+			mutex_unlock(&dvfs_lock);
+		}
+	}
+
+	return NOTIFY_OK;
+}
+
+/*
+ * Perform deferred disable in order to avoid slowdown
+ * caused by fast clk enable/disable
+ */
+static void deferred_disable(struct work_struct *work)
+{
+	struct dvfs_client *client =
+			container_of(work, struct dvfs_client, work.work);
+
+	dev_dbg(dvfs_dev, "deferred %s POST disable change\n",
+		client->clk_name);
+
+	mutex_lock(&client->deferred_work_lock);
+
+	if (client->work_scheduled) {
+		mutex_lock(&dvfs_lock);
+
+		list_del_init(&client->node);
+		client->work_scheduled = false;
+
+		update_voltages();
+
+		mutex_unlock(&dvfs_lock);
+	}
+
+	mutex_unlock(&client->deferred_work_lock);
+}
+
+static int dvfs_core_change_notify(struct notifier_block *nb,
+				   unsigned long flags, void *data)
+{
+	struct dvfs_client *client = container_of(nb, struct dvfs_client, nb);
+	struct clk_notifier_data *cnd = data;
 
 	switch (flags) {
 	case PRE_RATE_CHANGE:
@@ -293,8 +395,13 @@ static int dvfs_clk_change_notify(struct notifier_block *nb,
 		if (cnd->new_rate > cnd->old_rate) {
 			dev_dbg(dvfs_dev, "%s PRE rate change %lu -> %lu\n",
 				client->clk_name, cnd->old_rate, cnd->new_rate);
+
+			mutex_lock(&dvfs_lock);
+
 			update_freq_index(client, cnd->new_rate);
 			update_voltages();
+
+			mutex_unlock(&dvfs_lock);
 		}
 		break;
 
@@ -305,25 +412,66 @@ static int dvfs_clk_change_notify(struct notifier_block *nb,
 		if (cnd->new_rate < cnd->old_rate) {
 			dev_dbg(dvfs_dev, "%s POST rate change %lu -> %lu\n",
 				client->clk_name, cnd->old_rate, cnd->new_rate);
+
+			mutex_lock(&dvfs_lock);
+
 			update_freq_index(client, cnd->new_rate);
 			update_voltages();
+
+			mutex_unlock(&dvfs_lock);
 		}
 		break;
 	
 	case PRE_ENABLE_CHANGE:
 		dev_dbg(dvfs_dev, "%s PRE enable change\n", client->clk_name);
 		if (!__clk_get_enable_count(cnd->clk)) {
-			list_add(&client->node, &client->dvfs->active_clients);
-			update_freq_index(client, cnd->new_rate);
-			update_voltages();
+			mutex_lock(&client->deferred_work_lock);
+			mutex_lock(&dvfs_lock);
+
+			if (!client->work_scheduled || !dvfs_enabled) {
+
+				list_add(&client->node,
+					 &client->dvfs->active_clients);
+				update_freq_index(client, cnd->new_rate);
+				update_voltages();
+
+			} else {
+				dev_dbg(dvfs_dev,
+					"canceled delayed %s POST disable\n",
+					client->clk_name);
+
+				client->work_scheduled = false;
+			}
+
+			mutex_unlock(&dvfs_lock);
+			mutex_unlock(&client->deferred_work_lock);
 		}
 		break;
 
 	case POST_DISABLE_CHANGE:
-		dev_dbg(dvfs_dev, "%s POST disable change\n", client->clk_name);
 		if (!__clk_get_enable_count(cnd->clk)) {
-			list_del_init(&client->node);
-			update_voltages();
+			mutex_lock(&dvfs_lock);
+
+			if (dvfs_enabled) {
+				mutex_lock(&client->deferred_work_lock);
+
+				if (!client->work_scheduled) {
+					dev_dbg(dvfs_dev,
+						"scheduled %s POST disable\n",
+						client->clk_name);
+
+					client->work_scheduled = true;
+
+					if (!delayed_work_pending(&client->work))
+						schedule_delayed_work(
+							&client->work, HZ);
+				}
+
+				mutex_unlock(&client->deferred_work_lock);
+			} else
+				list_del_init(&client->node);
+
+			mutex_unlock(&dvfs_lock);
 		}
 		break;
 
@@ -331,20 +479,18 @@ static int dvfs_clk_change_notify(struct notifier_block *nb,
 		dev_warn(dvfs_dev, "FIX ME! %s\n", client->clk_name);
 	}
 
-	mutex_unlock(&dvfs_lock);
-
 	return NOTIFY_OK;
 }
 
 static void dvfs_init(struct dvfs_domain *dvfs)
 {
-	struct dvfs_client *client;
-	int ret, i;
+	struct dvfs_client **clients = dvfs->clients;
+	int ret;
 
 	INIT_LIST_HEAD(&dvfs->active_clients);
 
-	for (i = 0; i < dvfs->clients_nb; i++) {
-		client = dvfs->clients[i];
+	do {
+		struct dvfs_client *client = *clients;
 
 		client->clk = devm_clk_get(dvfs_dev, client->clk_name);
 		if (IS_ERR(client->clk)) {
@@ -355,9 +501,16 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 		}
 
 		client->dvfs = dvfs;
-		client->nb.notifier_call = dvfs_clk_change_notify;
 
-		ret = clk_notifier_register(client->clk, &client->nb);
+		if (dvfs == &dvfs_core) {
+			client->nb.notifier_call = dvfs_core_change_notify;
+			ret = clk_notifier_register(client->clk, &client->nb);
+		} else {
+			client->nb.notifier_call = dvfs_cpu_change_notify;
+			ret = cpufreq_register_notifier(&client->nb,
+						CPUFREQ_TRANSITION_NOTIFIER);
+		}
+
 		if (ret) {
 			dev_err(dvfs_dev, "Can't register %s clk notifier\n",
 				client->clk_name);
@@ -365,6 +518,10 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 			client->clk = NULL;
 			continue;
 		}
+
+		mutex_init(&client->deferred_work_lock);
+
+		INIT_DELAYED_WORK(&client->work, deferred_disable);
 
 		if (__clk_get_enable_count(client->clk)) {
 			unsigned long rate = clk_get_rate(client->clk);
@@ -375,19 +532,28 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 			dev_dbg(dvfs_dev, "%s rate = %luHz index = %d\n",
 				client->clk_name, rate, client->index);
 		}
-	}
+	} while (*(++clients));
 }
 
 static void dvfs_release(struct dvfs_domain *dvfs)
 {
-	int i;
+	struct dvfs_client **clients = dvfs->clients;
 
-	for (i = 0; i < dvfs->clients_nb; i++) {
-		struct dvfs_client *client = dvfs->clients[i];
+	do {
+		struct dvfs_client *client = *clients;
 
-		if (client->clk)
-			clk_notifier_unregister(client->clk, &client->nb);
-	}
+		if (client->clk) {
+			if (dvfs == &dvfs_core)
+				clk_notifier_unregister(client->clk,
+							&client->nb);
+			else
+				cpufreq_unregister_notifier(&client->nb,
+						CPUFREQ_TRANSITION_NOTIFIER);
+
+			cancel_delayed_work_sync(&client->work);
+			mutex_destroy(&client->deferred_work_lock);
+		}
+	} while (*(++clients));
 }
 
 static void dvfs_start_locked(void)
@@ -456,6 +622,8 @@ static int tegra_dvfs_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM_SLEEP
 static int dvfs_suspend(struct device *dev)
 {
+	struct dvfs_client **clients = dvfs_core.clients;
+
 	dev_dbg(dvfs_dev, "suspending...\n");
 
 	mutex_lock(&dvfs_lock);
@@ -463,7 +631,13 @@ static int dvfs_suspend(struct device *dev)
 	dvfs_stop_locked();
 
 	mutex_unlock(&dvfs_lock);
-	
+
+	do {
+		struct dvfs_client *client = *clients;
+		if (client->work_scheduled)
+			cancel_delayed_work_sync(&client->work);
+	} while (*(++clients));
+
 	return 0;
 }
 

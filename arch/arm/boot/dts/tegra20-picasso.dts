@@ -751,7 +751,7 @@
 				rtc_vdd_reg: ldo2 {
 					regulator-name = "vdd_ldo2,vdd_rtc";
 					regulator-min-microvolt = <950000>;
-					regulator-max-microvolt = <1200000>;
+					regulator-max-microvolt = <1300000>;
 				};
 
 				avdd_usb_reg: ldo3 {
