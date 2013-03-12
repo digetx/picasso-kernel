@@ -26,40 +26,37 @@ static struct regulator *cpu_reg, *core_reg, *rtc_reg;
 struct dvfs_domain;
 
 struct dvfs_client {
-	struct delayed_work work;
-	struct dvfs_domain *dvfs;
-	struct notifier_block nb;
-	struct list_head node;
-	struct mutex	deferred_work_lock;
-	struct clk	*clk;
-	const char	*clk_name;
-	bool		work_scheduled;
-	int		*freqs;
-	unsigned	index;
+	struct delayed_work	work;
+	struct dvfs_domain	*dvfs;
+	struct notifier_block	nb;
+	struct list_head	node;
+	struct mutex		deferred_work_lock;
+	struct clk		*clk;
+	const char		*clk_name;
+	unsigned		index;
+	int			freqs[];
 };
 
 struct dvfs_domain {
-	struct list_head active_clients;
-	struct dvfs_client **clients;
-	int	*voltages_mv;
+	struct list_head	active_clients;
+	struct dvfs_client	**clients;
+	int			voltages_mv[];
 };
 
 #define DVFS_CLIENT(_name, _freqs)					\
-	static int dvfs_##_name##_f[] = { _freqs, -1 };			\
 	static struct dvfs_client dvfs_##_name##_client = {		\
 		.clk = NULL,						\
 		.clk_name = #_name,					\
-		.freqs = dvfs_##_name##_f,				\
+		.freqs = { _freqs, -1 },				\
 	}
 
 #define DVFS(_name, _voltages, _client...)				\
-	static int dvfs_##_name##_v[] = { _voltages, };			\
 	static struct dvfs_client *dvfs_##_name##_clients[] = {		\
 		_client, NULL						\
 	};								\
 	static struct dvfs_domain dvfs_##_name = {			\
 		.clients = dvfs_##_name##_clients,			\
-		.voltages_mv = dvfs_##_name##_v,			\
+		.voltages_mv =  { _voltages, },				\
 	}
 
 #define _100uV			100000
@@ -79,7 +76,7 @@ struct dvfs_domain {
 #define CORE_MAX_VDD		1300
 #define CORE_NOMINAL_VDD	1225
 
-#define CORE_MILLIVOLTS		1000,	1050,	1100,	1150, \
+#define CORE_MILLIVOLTS		1100,	1100,	1100,	1150, \
 				1200,	1225,	1275,	CORE_MAX_VDD
 
 #define EMC_FREQS		50000,	150000,	300000,	600000
@@ -249,10 +246,10 @@ static void update_voltages(void)
 		return;
 
 	/*
-	 * Get indexes
+	 * Get core index
 	 */
 	list_for_each_entry(client, &dvfs_core.active_clients, node) {
-		dev_dbg(dvfs_dev, "active client %s index = %d\n",
+		dev_dbg(dvfs_dev, "active core client %s index = %d\n",
 			client->clk_name, client->index);
 		dvfs_core_index = max(client->index, dvfs_core_index);
 	}
@@ -298,7 +295,7 @@ static void update_voltages(void)
  */
 static void update_freq_index(struct dvfs_client *c, unsigned long freq)
 {
-	for (c->index = 0; c->freqs[c->index + 1] > 0; c->index++)
+	for (c->index = 0; c->freqs[c->index + 1] >= 0; c->index++)
 		if (c->freqs[c->index] * 1000 >= freq)
 			break;
 }
@@ -366,18 +363,12 @@ static void deferred_disable(struct work_struct *work)
 		client->clk_name);
 
 	mutex_lock(&client->deferred_work_lock);
+	mutex_lock(&dvfs_lock);
 
-	if (client->work_scheduled) {
-		mutex_lock(&dvfs_lock);
+	list_del_init(&client->node);
+	update_voltages();
 
-		list_del_init(&client->node);
-		client->work_scheduled = false;
-
-		update_voltages();
-
-		mutex_unlock(&dvfs_lock);
-	}
-
+	mutex_unlock(&dvfs_lock);
 	mutex_unlock(&client->deferred_work_lock);
 }
 
@@ -424,55 +415,51 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 	
 	case PRE_ENABLE_CHANGE:
 		dev_dbg(dvfs_dev, "%s PRE enable change\n", client->clk_name);
-		if (!__clk_get_enable_count(cnd->clk)) {
-			mutex_lock(&client->deferred_work_lock);
+
+		if (__clk_get_enable_count(client->clk))
+			break;
+
+		mutex_lock(&client->deferred_work_lock);
+
+		if (list_empty(&client->node)) {
 			mutex_lock(&dvfs_lock);
 
-			if (!client->work_scheduled || !dvfs_enabled) {
-
-				list_add(&client->node,
-					 &client->dvfs->active_clients);
-				update_freq_index(client, cnd->new_rate);
-				update_voltages();
-
-			} else {
-				dev_dbg(dvfs_dev,
-					"canceled delayed %s POST disable\n",
-					client->clk_name);
-
-				client->work_scheduled = false;
-			}
+			list_add(&client->node, &client->dvfs->active_clients);
+			update_voltages();
 
 			mutex_unlock(&dvfs_lock);
-			mutex_unlock(&client->deferred_work_lock);
+		} else {
+			dev_dbg(dvfs_dev, "canceled delayed %s POST disable\n",
+				client->clk_name);
+
+			cancel_delayed_work(&client->work);
 		}
+
+		mutex_unlock(&client->deferred_work_lock);
 		break;
 
 	case POST_DISABLE_CHANGE:
-		if (!__clk_get_enable_count(cnd->clk)) {
+		dev_dbg(dvfs_dev, "%s POST disable change\n", client->clk_name);
+
+		if (__clk_get_enable_count(client->clk))
+			break;
+
+		mutex_lock(&client->deferred_work_lock);
+
+		if (dvfs_enabled) {
+			dev_dbg(dvfs_dev, "scheduled %s POST disable\n",
+				client->clk_name);
+
+			schedule_delayed_work(&client->work, HZ);
+		} else {
 			mutex_lock(&dvfs_lock);
 
-			if (dvfs_enabled) {
-				mutex_lock(&client->deferred_work_lock);
-
-				if (!client->work_scheduled) {
-					dev_dbg(dvfs_dev,
-						"scheduled %s POST disable\n",
-						client->clk_name);
-
-					client->work_scheduled = true;
-
-					if (!delayed_work_pending(&client->work))
-						schedule_delayed_work(
-							&client->work, HZ);
-				}
-
-				mutex_unlock(&client->deferred_work_lock);
-			} else
-				list_del_init(&client->node);
+			list_del_init(&client->node);
 
 			mutex_unlock(&dvfs_lock);
 		}
+
+		mutex_unlock(&client->deferred_work_lock);
 		break;
 
 	case ABORT_RATE_CHANGE:
@@ -484,23 +471,26 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 
 static void dvfs_init(struct dvfs_domain *dvfs)
 {
-	struct dvfs_client **clients = dvfs->clients;
-	int ret;
+	int i, ret;
 
 	INIT_LIST_HEAD(&dvfs->active_clients);
 
-	do {
-		struct dvfs_client *client = *clients;
+	for (i = 0; dvfs->clients[i] != NULL; i++) {
+		struct dvfs_client *client = dvfs->clients[i];
 
 		client->clk = devm_clk_get(dvfs_dev, client->clk_name);
 		if (IS_ERR(client->clk)) {
 			dev_err(dvfs_dev, "Can't get %s clk\n",
 				client->clk_name);
+
 			client->clk = NULL;
 			continue;
 		}
 
 		client->dvfs = dvfs;
+		mutex_init(&client->deferred_work_lock);
+
+		mutex_lock(&client->deferred_work_lock);
 
 		if (dvfs == &dvfs_core) {
 			client->nb.notifier_call = dvfs_core_change_notify;
@@ -514,14 +504,15 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 		if (ret) {
 			dev_err(dvfs_dev, "Can't register %s clk notifier\n",
 				client->clk_name);
+
 			devm_clk_put(dvfs_dev, client->clk);
 			client->clk = NULL;
+			mutex_unlock(&client->deferred_work_lock);
 			continue;
 		}
 
-		mutex_init(&client->deferred_work_lock);
-
 		INIT_DELAYED_WORK(&client->work, deferred_disable);
+		INIT_LIST_HEAD(&client->node);
 
 		if (__clk_get_enable_count(client->clk)) {
 			unsigned long rate = clk_get_rate(client->clk);
@@ -532,15 +523,17 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 			dev_dbg(dvfs_dev, "%s rate = %luHz index = %d\n",
 				client->clk_name, rate, client->index);
 		}
-	} while (*(++clients));
+
+		mutex_unlock(&client->deferred_work_lock);
+	}
 }
 
 static void dvfs_release(struct dvfs_domain *dvfs)
 {
-	struct dvfs_client **clients = dvfs->clients;
+	int i;
 
-	do {
-		struct dvfs_client *client = *clients;
+	for (i = 0; dvfs->clients[i] != NULL; i++) {
+		struct dvfs_client *client = dvfs->clients[i];
 
 		if (client->clk) {
 			if (dvfs == &dvfs_core)
@@ -550,10 +543,9 @@ static void dvfs_release(struct dvfs_domain *dvfs)
 				cpufreq_unregister_notifier(&client->nb,
 						CPUFREQ_TRANSITION_NOTIFIER);
 
-			cancel_delayed_work_sync(&client->work);
 			mutex_destroy(&client->deferred_work_lock);
 		}
-	} while (*(++clients));
+	}
 }
 
 static void dvfs_start_locked(void)
@@ -605,38 +597,52 @@ static int tegra_dvfs_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int tegra_dvfs_remove(struct platform_device *pdev)
+static void dvfs_lock_all_core_clients(void)
 {
-	mutex_lock(&dvfs_lock);
+	struct dvfs_client *client;
+	int i;
 
-	dvfs_stop_locked();
+	for (i = 0; dvfs_core.clients[i] != NULL; i++) {
+		client = dvfs_core.clients[i];
 
-	mutex_unlock(&dvfs_lock);
-
-	dvfs_release(&dvfs_cpu);
-	dvfs_release(&dvfs_core);
-
-	return 0;
+		if (client->clk)
+			mutex_lock(&client->deferred_work_lock);
+	}
 }
 
-#ifdef CONFIG_PM_SLEEP
+static void dvfs_unlock_all_core_clients(void)
+{
+	struct dvfs_client *client;
+	int i;
+
+	for (i = 0; dvfs_core.clients[i] != NULL; i++) {
+		client = dvfs_core.clients[i];
+
+		if (client->clk)
+			mutex_unlock(&client->deferred_work_lock);
+	}
+}
+
 static int dvfs_suspend(struct device *dev)
 {
-	struct dvfs_client **clients = dvfs_core.clients;
+	struct dvfs_client *client, *tmp;
 
 	dev_dbg(dvfs_dev, "suspending...\n");
 
+	dvfs_lock_all_core_clients();
 	mutex_lock(&dvfs_lock);
+
+	list_for_each_entry_safe(client, tmp, &dvfs_core.active_clients, node) {
+		if (work_busy(&client->work.work)) {
+			cancel_delayed_work(&client->work);
+			list_del_init(&client->node);
+		}
+	}
 
 	dvfs_stop_locked();
 
 	mutex_unlock(&dvfs_lock);
-
-	do {
-		struct dvfs_client *client = *clients;
-		if (client->work_scheduled)
-			cancel_delayed_work_sync(&client->work);
-	} while (*(++clients));
+	dvfs_unlock_all_core_clients();
 
 	return 0;
 }
@@ -645,15 +651,26 @@ static int dvfs_resume(struct device *dev)
 {
 	dev_dbg(dvfs_dev, "resuming...\n");
 
+	dvfs_lock_all_core_clients();
 	mutex_lock(&dvfs_lock);
 
 	dvfs_start_locked();
 
 	mutex_unlock(&dvfs_lock);
+	dvfs_unlock_all_core_clients();
 
 	return 0;
 }
-#endif
+
+static int tegra_dvfs_remove(struct platform_device *pdev)
+{
+	dvfs_suspend(dvfs_dev);
+
+	dvfs_release(&dvfs_cpu);
+	dvfs_release(&dvfs_core);
+
+	return 0;
+}
 
 static SIMPLE_DEV_PM_OPS(tegra_dvfs_pm_ops, dvfs_suspend, dvfs_resume);
 
