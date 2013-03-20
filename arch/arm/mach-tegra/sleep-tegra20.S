@@ -30,6 +30,7 @@
 #include <asm/glue-cache.h>
 #include <asm/glue-proc.h>
 #include <asm/cp15.h>
+#include <asm/hardware/cache-l2x0.h>
 
 #include "sleep.h"
 #include "flowctrl.h"
@@ -56,11 +57,9 @@
 #define CLK_RESET_PLLX_BASE		0xe0
 #define CLK_RESET_PLLX_MISC		0xe4
 
-#define CPU_RESETTABLE			2
-
-/* PMC_SCRATCH37-39 and 41 are used for tegra_pen_lock in Tegra2 idle */
-#define PMC_SCRATCH38                   0x134
 #define PMC_SCRATCH41			0x140
+
+#define TEGRA_PL310_VIRT (TEGRA_ARM_PL310_BASE - IO_CPU_PHYS + IO_CPU_VIRT)
 
 #if defined(CONFIG_HOTPLUG_CPU) || defined(CONFIG_PM_SLEEP)
 /*
@@ -122,7 +121,34 @@ ENDPROC(tegra20_cpu_shutdown)
  * tegra20_tear_down_core in IRAM
  */
 ENTRY(tegra20_sleep_core_finish)
-	bl	tegra_disable_clean_inv_dcache
+	stmfd	sp!, {r0}
+	dmb					@ ensure ordering
+
+	/* Disable the D-cache */
+	mrc	p15, 0, r2, c1, c0, 0
+	bic	r2, r2, #CR_C
+	mcr	p15, 0, r2, c1, c0, 0
+	isb
+
+	/* Flush the D-cache */
+	bl	v7_flush_dcache_louis
+
+	/* Sync l2 */
+	dsb
+	mov32	r1, TEGRA_PL310_VIRT
+	mov	r2, #0
+	str	r2, [r1, #L2X0_CACHE_SYNC]
+
+	/* Invalidate the TLBs & BTAC */
+	mcr	p15, 0, r2, c8, c3, 0	@ invalidate shared TLBs
+	mcr	p15, 0, r2, c7, c1, 6	@ invalidate shared BTAC
+	dsb
+	isb
+
+	/* Trun off coherency */
+	exit_smp r4, r5
+
+	ldmfd	sp!, {r0}
 
 	mov32	r1, tegra20_tear_down_core
 	mov32	r2, tegra20_iram_start
@@ -137,6 +163,7 @@ ENTRY(tegra20_sleep_core_finish)
 	mov	pc, r3
 ENDPROC(tegra20_sleep_core_finish)
 
+	.arm
 /* START OF ROUTINES COPIED TO IRAM */
 	.align L1_CACHE_SHIFT
 	.globl tegra20_iram_start
@@ -149,9 +176,7 @@ tegra20_iram_start:
  * brings the system back up to a safe starting point (SDRAM out of
  * self-refresh, PLLC, PLLM and PLLP reenabled, CPU running on PLLP,
  * system clock running on the same PLL that it suspended at), and
- * jumps to tegra_lp2_startup to restore PLLX and virtual addressing.
- * physical address of tegra_lp2_startup expected to be stored in
- * PMC_SCRATCH41
+ * jumps to tegra_resume expected to be stored in PMC_SCRATCH41
  *
  * NOTE: THIS *MUST* BE RELOCATED TO TEGRA_IRAM_CODE_AREA AND MUST BE FIRST.
  */
@@ -241,7 +266,7 @@ exit_selfrefresh_loop:
 
 	mov32	r0, TEGRA_PMC_BASE
 	ldr	r0, [r0, #PMC_SCRATCH41]
-	mov	pc, r0
+	bx	r0
 ENDPROC(tegra20_lp1_reset)
 
 /*
@@ -251,6 +276,11 @@ ENDPROC(tegra20_lp1_reset)
  * puts memory in self-refresh for LP0 and LP1
  */
 tegra20_tear_down_core:
+ THUMB(	.thumb		)
+ THUMB(	.align		)
+ THUMB(	bx	pc	)
+ THUMB(	nop		)
+	.arm
 	bl	tegra20_sdram_self_refresh
 	bl	tegra20_cpu_clk32k
 	b	tegra20_enter_sleep
@@ -305,11 +335,6 @@ tegra20_cpu_clk32k:
  * executes from SDRAM with target state is LP2
  */
 tegra20_enter_sleep:
-	mov32	r7, TEGRA_TMRUS_BASE
-	ldr	r1, [r7]
-	mov32	r4, TEGRA_PMC_BASE
-	str	r1, [r4, #PMC_SCRATCH38]
-	dsb
 	mov32	r6, TEGRA_FLOW_CTRL_BASE
 
 	mov	r0, #FLOW_CTRL_WAIT_FOR_INTERRUPT

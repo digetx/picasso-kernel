@@ -27,14 +27,14 @@
 #include "iomap.h"
 #include "fuse.h"
 
-u8 flowctrl_offset_halt_cpu[] = {
+static const u8 flowctrl_offset_halt_cpu[] = {
 	FLOW_CTRL_HALT_CPU0_EVENTS,
 	FLOW_CTRL_HALT_CPU1_EVENTS,
 	FLOW_CTRL_HALT_CPU1_EVENTS + 8,
 	FLOW_CTRL_HALT_CPU1_EVENTS + 16,
 };
 
-u8 flowctrl_offset_cpu_csr[] = {
+static const u8 flowctrl_offset_cpu_csr[] = {
 	FLOW_CTRL_CPU0_CSR,
 	FLOW_CTRL_CPU1_CSR,
 	FLOW_CTRL_CPU1_CSR + 8,
@@ -82,14 +82,17 @@ void flowctrl_cpu_suspend_enter(unsigned int cpuid)
 		reg &= ~TEGRA20_FLOW_CTRL_CSR_WFE_BITMAP;
 		/* clear wfi bitmap */
 		reg &= ~TEGRA20_FLOW_CTRL_CSR_WFI_BITMAP;
+		/* pwr gating on wfe */
+		reg |= TEGRA20_FLOW_CTRL_CSR_WFE_CPU0 << cpuid;
 		break;
 	case TEGRA30:
 		/* clear wfe bitmap */
 		reg &= ~TEGRA30_FLOW_CTRL_CSR_WFE_BITMAP;
 		/* clear wfi bitmap */
 		reg &= ~TEGRA30_FLOW_CTRL_CSR_WFI_BITMAP;
-		break;
 	}
+	reg |= FLOW_CTRL_CSR_INTR_FLAG;			/* clear intr flag */
+	reg |= FLOW_CTRL_CSR_EVENT_FLAG;		/* clear event flag */
 	reg |= FLOW_CTRL_CSR_ENABLE;			/* pwr gating */
 	flowctrl_write_cpu_csr(cpuid, reg);
 
@@ -121,7 +124,6 @@ void flowctrl_cpu_suspend_exit(unsigned int cpuid)
 		reg &= ~TEGRA30_FLOW_CTRL_CSR_WFE_BITMAP;
 		/* clear wfi bitmap */
 		reg &= ~TEGRA30_FLOW_CTRL_CSR_WFI_BITMAP;
-		break;
 	}
 	reg &= ~FLOW_CTRL_CSR_ENABLE;			/* clear enable */
 	reg |= FLOW_CTRL_CSR_INTR_FLAG;			/* clear intr */

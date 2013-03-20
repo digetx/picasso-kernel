@@ -37,6 +37,8 @@
 #include <asm/tlbflush.h>
 #include <asm/pgalloc.h>
 #include <asm/outercache.h>
+#include <asm/rodata.h>
+#include <asm/hardware/gic.h>
 
 #include "iomap.h"
 #include "reset.h"
@@ -78,6 +80,7 @@
 static unsigned int g_diag_reg;
 static DEFINE_SPINLOCK(tegra_lp2_lock);
 static void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
+static void __iomem *gic_cpu_base = IO_ADDRESS(TEGRA_ARM_PERIF_BASE + 0x100);
 static struct clk *tegra_pclk;
 void (*tegra_tear_down_cpu)(void);
 
@@ -355,41 +358,62 @@ static int tegra20_sleep_core(unsigned long v2p)
 	/* Switch to the identity mapping. */
 	cpu_switch_mm(idmap_pgd, &init_mm);
 
- 	/* Flush the TLB. */
+	/* Flush the TLB. */
 	local_flush_tlb_all();
 
 	tegra20_sleep_core_finish(v2p);
 
+	/* should never here */
+	BUG();
+
 	return 0;
+}
+
+void inline tegra_gic_cpu_disable(void)
+{
+	writel(0, gic_cpu_base + GIC_CPU_CTRL);
 }
 
 static void tegra_suspend_dram(void)
 {
-	unsigned long tmp = l2x0_saved_regs_addr;
-	l2x0_saved_regs_addr = 0;
+	unsigned long tmp;
 
-	cpu_pm_enter();
-	cpu_cluster_pm_enter();
+	set_kernel_text_rw();
 
+	if (IS_ENABLED(CONFIG_CACHE_L2X0)) {
+		tmp = l2x0_saved_regs_addr;
+		l2x0_saved_regs_addr = 0;
+	}
+
+	local_fiq_disable();
 	tegra_timer_suspend();
 	tegra_common_suspend();
 	tegra_pm_set();
 	tegra_cpu_reset_handler_save();
+	cpu_pm_enter();
+	cpu_cluster_pm_enter();
 	suspend_cpu_complex();
+	tegra_gic_cpu_disable();
+
+	flush_cache_all();
+	outer_flush_all();
 	outer_disable();
 
 	cpu_suspend(PHYS_OFFSET - PAGE_OFFSET, &tegra20_sleep_core);
 
 	outer_resume();
-	tegra_cpu_reset_handler_restore();
 	restore_cpu_complex();
-	tegra_common_resume();
-	tegra_timer_resume();
-
 	cpu_cluster_pm_exit();
 	cpu_pm_exit();
+	tegra_cpu_reset_handler_restore();
+	tegra_common_resume();
+	tegra_timer_resume();
+	local_fiq_enable();
 
-	l2x0_saved_regs_addr = tmp;
+	if (IS_ENABLED(CONFIG_CACHE_L2X0))
+		l2x0_saved_regs_addr = tmp;
+
+	set_kernel_text_ro();
 }
 
 static __cpuinit int tegra_suspend_enter(suspend_state_t state)
@@ -451,6 +475,7 @@ void __init tegra_init_suspend(struct suspend_params *sparams)
 	iram_code = ioremap(TEGRA_IRAM_CODE_AREA, iram_save_size);
 	if (!iram_code) {
 		pr_err("%s: Failed to map iram_code\n", __func__);
+		kfree(reloc_lp0);
 		return;
 	}
 

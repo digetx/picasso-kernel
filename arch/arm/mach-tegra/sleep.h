@@ -85,6 +85,8 @@
 .macro l2_cache_resume, tmp1, tmp2, tmp3, phys_l2x0_saved_regs
 	adr	\tmp1, \phys_l2x0_saved_regs
 	ldr	\tmp1, [\tmp1]
+	cmp	\tmp1, #0
+	beq	exit_l2_resume
 	ldr	\tmp2, [\tmp1, #L2X0_R_PHY_BASE]
 	ldr	\tmp3, [\tmp2, #L2X0_CTRL]
 	tst	\tmp3, #L2X0_CTRL_EN

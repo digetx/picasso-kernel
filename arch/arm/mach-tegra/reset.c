@@ -108,9 +108,19 @@ void __init tegra_cpu_reset_handler_init(void)
 #endif
 
 #ifdef CONFIG_PM_SLEEP
+	__tegra_cpu_reset_handler_data[TEGRA_RESET_STARTUP_LP1] =
+		TEGRA_IRAM_CODE_AREA;
 	__tegra_cpu_reset_handler_data[TEGRA_RESET_STARTUP_LP2] =
 		virt_to_phys((void *)tegra_resume);
 #endif
+
+	/* Push all of reset handler data out to the L3 memory system. */
+	__cpuc_coherent_kern_range(
+		(unsigned long)&__tegra_cpu_reset_handler_data[0],
+		(unsigned long)&__tegra_cpu_reset_handler_data[TEGRA_RESET_DATA_SIZE]);
+
+	outer_clean_range(__pa(&__tegra_cpu_reset_handler_data[0]),
+			  __pa(&__tegra_cpu_reset_handler_data[TEGRA_RESET_DATA_SIZE]));
 
 	tegra_cpu_reset_handler_enable();
 }
