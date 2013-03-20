@@ -58,6 +58,7 @@ static struct ec_info {
 	int				power_state_gps;
 	struct delayed_work		lsc_work;
 	struct notifier_block		panic_notifier;
+	void (*arm_reboot) (char mode, const char *cmd);
 } *ec_chip;
 
 void inline ec_lock(void)
@@ -648,8 +649,13 @@ static void ec_reboot(char mode, const char *cmd)
 
 	if (!ec_chip->is_panic)
 		ec_write_word_data(COLD_REBOOT, 1);
-	else
-		ec_write_word_data_locked(WARM_REBOOT, 0);
+	else {
+		/* panic may run under spinlock, hence i2c can't be used */
+		if (ec_chip->arm_reboot)
+			ec_chip->arm_reboot(mode, cmd);
+		else
+			ec_write_word_data_locked(WARM_REBOOT, 0);
+	}
 }
 
 void ec_set_audio_table(int table_value)
@@ -688,22 +694,17 @@ static struct mfd_cell ec_cell[] = {
 	},
 };
 
-static const struct of_device_id ec_dt_ids[] = {
-	{ .compatible = "ec,ec-control" },
-	{ }
-};
-MODULE_DEVICE_TABLE(of, ec_dt_ids);
-
 static int ec_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
+	struct device_node *np = client->dev.of_node;
 	int ret;
 
 	ec_chip = devm_kzalloc(&client->dev, sizeof(*ec_chip), GFP_KERNEL);
 	if (!ec_chip)
 		return -ENOMEM;
 
-	if (of_property_read_u32(client->dev.of_node, "ec,i2c-retry-count",
+	if (of_property_read_u32(np, "ec,i2c-retry-count",
 				 &ec_chip->i2c_retry_count))
 		ec_chip->i2c_retry_count = 5;
 
@@ -712,8 +713,7 @@ static int ec_probe(struct i2c_client *client,
 	/* create dev sysfs for non-battery functions */
 	ret = sysfs_create_group(&client->dev.kobj, &ec_control_attr_group);
 	if (ret) {
-		dev_err(&client->dev,
-			"%s: Failed to create ec-control sysfs group\n",
+		dev_err(&client->dev, "%s: Failed to create sysfs group\n",
 			__func__);
 		return ret;
 	}
@@ -721,9 +721,19 @@ static int ec_probe(struct i2c_client *client,
 	/* create legacy sysfs symlink for acer binary blobs */
 	ret = sysfs_create_link(NULL, &client->dev.kobj, "EcControl");
 	if (ret) {
-		dev_err(&client->dev,
-			"%s: Failed to create EcControl sysfs symlink\n",
+		dev_err(&client->dev, "%s: Failed to create sysfs symlink\n",
 			__func__);
+		sysfs_remove_group(&client->dev.kobj, &ec_control_attr_group);
+		return ret;
+	}
+
+	/* register battery and leds */
+	ret = mfd_add_devices(&client->dev, -1,
+			      ec_cell, ARRAY_SIZE(ec_cell),
+			      NULL, 0, NULL);
+	if (ret) {
+		dev_err(&client->dev, "%s: Failed to add devices\n", __func__);
+		sysfs_remove_link(NULL, "EcControl");
 		sysfs_remove_group(&client->dev.kobj, &ec_control_attr_group);
 		return ret;
 	}
@@ -734,8 +744,14 @@ static int ec_probe(struct i2c_client *client,
 	ec_set_lcd_cabc(true);
 
 	/* set pm functions */
-	pm_power_off   = ec_poweroff;
-	arm_pm_restart = ec_reboot;
+	if (of_property_read_bool(np, "system-power-controller")) {
+		pm_power_off = ec_poweroff;
+
+		if (arm_pm_restart)
+			ec_chip->arm_reboot = arm_pm_restart;
+
+		arm_pm_restart = ec_reboot;
+	}
 
 	/* register panic notifier */
 	ec_chip->panic_notifier.notifier_call = panic_event;
@@ -747,32 +763,28 @@ static int ec_probe(struct i2c_client *client,
 	schedule_delayed_work(&ec_chip->lsc_work, msecs_to_jiffies(10000));
 #endif
 
-	/* register battery and leds */
-	ret = mfd_add_devices(&client->dev, -1,
-			      ec_cell, ARRAY_SIZE(ec_cell),
-			      NULL, 0, NULL);
-
-	dev_info(&client->dev, "device registered\n");
+	dev_dbg(&client->dev, "device registered\n");
 
 	return 0;
 }
 
 static int ec_remove(struct i2c_client *client)
 {
+	mfd_remove_devices(&client->dev);
 	cancel_delayed_work_sync(&ec_chip->lsc_work);
-
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 					 &ec_chip->panic_notifier);
+	sysfs_remove_link(NULL, "EcControl");
+	sysfs_remove_group(&client->dev.kobj, &ec_control_attr_group);
 
 	return 0;
 }
 
-static void ec_shutdown(struct i2c_client *client)
-{
-#ifdef CONFIG_LSC_FROM_EC
-	cancel_delayed_work_sync(&ec_chip->lsc_work);
-#endif
-}
+static const struct of_device_id ec_dt_ids[] = {
+	{ .compatible = "ec,ec-control" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, ec_dt_ids);
 
 static const struct i2c_device_id ec_id[] = {
 	{ "ec-control", 0 },
@@ -784,10 +796,9 @@ static struct i2c_driver ec_control_driver = {
 	.probe		= ec_probe,
 	.remove		= ec_remove,
 	.id_table	= ec_id,
-	.shutdown	= ec_shutdown,
-	.driver = {
+	.driver	= {
 		.name	= "ec-control",
-		.of_match_table	= of_match_ptr(ec_dt_ids),
+		.of_match_table	= ec_dt_ids,
 	},
 };
 module_i2c_driver(ec_control_driver);
