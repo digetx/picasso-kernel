@@ -718,7 +718,7 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 
 	tegra_fb->info = info;
 
-	dev_info(&ndev->dev, "probed\n");
+	dev_info(&ndev->dev, "fb probed\n");
 
 	if (fb_data->flags & TEGRA_FB_FLIP_ON_PROBE) {
 		tegra_dc_update_windows(&tegra_fb->win, 1);

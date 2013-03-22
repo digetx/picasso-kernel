@@ -2082,7 +2082,7 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	dc->vblank_syncpt = (dc->ndev->id == 0) ?
 		NVSYNCPT_VBLANK0 : NVSYNCPT_VBLANK1;
 
-#ifdef TEGRA_DC_EXTENSIONS
+#ifdef CONFIG_TEGRA_DC_EXTENSIONS
 	dc->ext = tegra_dc_ext_register(ndev, dc);
 	if (IS_ERR_OR_NULL(dc->ext)) {
 		dev_warn(&ndev->dev, "Failed to enable Tegra DC extensions.\n");
@@ -2106,7 +2106,7 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 
 	tegra_dc_create_debugfs(dc);
 
-	dev_info(&ndev->dev, "probed\n");
+	dev_info(&ndev->dev, "dc probed\n");
 
 	if (dc->pdata->fb) {
 		if (dc->enabled && dc->pdata->fb->bits_per_pixel == -1) {

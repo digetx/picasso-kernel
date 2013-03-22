@@ -29,7 +29,7 @@
 #include <linux/nvmap.h>
 
 /* XXX ew */
-#include "tegra_dc_ext.h"
+#include "../tegra_dc_ext.h"
 #include "../dc.h"
 #include "../dc_priv.h"
 #include "../dc_config.h"

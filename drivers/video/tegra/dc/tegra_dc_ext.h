@@ -22,6 +22,7 @@
 #include <linux/nvhost.h>
 
 struct tegra_dc_ext;
+struct tegra_dc;
 
 #ifdef CONFIG_TEGRA_DC_EXTENSIONS
 int __init tegra_dc_ext_module_init(void);
