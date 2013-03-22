@@ -347,10 +347,12 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	state = decode_state(buf, n);
 
+#ifdef CONFIG_PM_AUTOSLEEP
 	if (IS_ENABLED(CONFIG_PM_EARLYSUSPEND)) {
 		error = pm_autosleep_set_state(state);
-		goto out_unlocked;
+		return error ? error : n;
 	}
+#endif
 
 	error = pm_autosleep_lock();
 	if (error)
@@ -370,7 +372,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
  out:
 	pm_autosleep_unlock();
-out_unlocked:
+
 	return error ? error : n;
 }
 
