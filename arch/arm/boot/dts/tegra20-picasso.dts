@@ -603,6 +603,7 @@
 				ec,i2c-retry-count = <5>;
 				power-supply = <&gpio_charger>;
 				system-power-controller;
+				leds-reset;
 			};
 		};
 	};

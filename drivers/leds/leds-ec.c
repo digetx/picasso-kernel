@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/leds.h>
 #include <linux/platform_device.h>
+#include <linux/of.h>
 
 #include <linux/mfd/ec-control.h>
 
@@ -66,6 +67,7 @@ static struct ec_led ec_orange_led = {
 
 static int ec_leds_probe(struct platform_device *pdev)
 {
+	struct device_node *np = pdev->dev.parent->of_node;
 	int ret;
 
 	INIT_WORK(&ec_white_led.work, ec_white_led_work);
@@ -84,6 +86,11 @@ static int ec_leds_probe(struct platform_device *pdev)
 			"%s: Failed to register orange led\n", __func__);
 		led_classdev_unregister(&ec_white_led.cdev);
 		return ret;
+	}
+
+	if (of_property_read_bool(np, "leds-reset")) {
+		led_set_brightness(&ec_white_led.cdev, 0);
+		led_set_brightness(&ec_orange_led.cdev, 0);
 	}
 
 	return 0;
