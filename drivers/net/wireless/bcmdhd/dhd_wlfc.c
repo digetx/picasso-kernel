@@ -2238,8 +2238,13 @@ int
 dhd_wlfc_init(dhd_pub_t *dhd)
 {
 	char iovbuf[12]; /* Room for "tlv" + '\0' + parameter */
+	uint32 tlv;
+	
+	if (dhd == NULL)
+		return BCME_NOMEM;
+
 	/* enable all signals & indicate host proptxstatus logic is active */
-	uint32 tlv = dhd->wlfc_enabled?
+	tlv = dhd->wlfc_enabled?
 		WLFC_FLAGS_RSSI_SIGNALS |
 		WLFC_FLAGS_XONXOFF_SIGNALS |
 		WLFC_FLAGS_CREDIT_STATUS_SIGNALS |
@@ -2394,8 +2399,13 @@ dhd_wlfc_cleanup(dhd_pub_t *dhd, ifpkt_cb_t fn, int arg)
 void
 dhd_wlfc_deinit(dhd_pub_t *dhd)
 {
+	athost_wl_status_info_t* wlfc;
+
+	if (dhd == NULL)
+		return;
+
 	/* cleanup all psq related resources */
-	athost_wl_status_info_t* wlfc = (athost_wl_status_info_t*)
+	wlfc = (athost_wl_status_info_t*)
 		dhd->wlfc_state;
 
 	dhd_os_wlfc_block(dhd);
