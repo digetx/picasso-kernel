@@ -117,6 +117,9 @@ static int rotlock_switch_remove(struct platform_device *pdev)
 {
 	struct rotlock_data *switch_data = platform_get_drvdata(pdev);
 
+#ifdef CONFIG_PM_EARLYSUSPEND
+	unregister_early_suspend(&switch_data->suspend_handler);
+#endif
 	cancel_delayed_work_sync(&switch_data->work);
 	switch_dev_unregister(&switch_data->sdev);
 
