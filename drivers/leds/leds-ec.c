@@ -20,25 +20,10 @@ struct ec_led {
 	u8			new_state;
 };
 
-EC_REG_DATA(RESET_LED,		0x40,	100);
+EC_REG_DATA(RESET_LEDS,		0x40,	100);
 EC_REG_DATA(POWER_LED_ON,	0x42,	100);
 EC_REG_DATA(CHARGE_LED_ON,	0x43,	100);
 EC_REG_DATA(ANDROID_LEDS_OFF,	0x5A,	100);
-
-#define EC_LED_WORK(_color, _addr)					\
-static void ec_##_color##_led_work(struct work_struct *work)		\
-{									\
-	struct ec_led *led = container_of(work, struct ec_led, work);	\
-									\
-	if (led->new_state == LED_OFF) {				\
-		ec_write_word_data(RESET_LED, 0);			\
-		ec_write_word_data(ANDROID_LEDS_OFF, 0);		\
-	} else								\
-		ec_write_word_data(_addr, 0);				\
-}
-
-EC_LED_WORK(white, POWER_LED_ON);
-EC_LED_WORK(orange, CHARGE_LED_ON);
 
 static void ec_led_set(struct led_classdev *led_cdev, 
 		       enum led_brightness value)
@@ -49,21 +34,27 @@ static void ec_led_set(struct led_classdev *led_cdev,
 	schedule_work(&led->work);
 }
 
-static struct ec_led ec_white_led = {
-	.cdev = {
-		.name			= "power-button:white",
-		.brightness_set		= ec_led_set,
-		.max_brightness		= 1,
-	},
-};
+#define EC_LED(_color, _addr)						\
+static struct ec_led ec_##_color##_led = {				\
+	.cdev = {							\
+		.name			= "power-button:" #_color,	\
+		.brightness_set		= ec_led_set,			\
+		.max_brightness		= 1,				\
+		.flags			= LED_CORE_SUSPENDRESUME,	\
+	},								\
+};									\
+static void ec_##_color##_led_work(struct work_struct *work)		\
+{									\
+	struct ec_led *led = container_of(work, struct ec_led, work);	\
+									\
+	if (led->new_state)						\
+		ec_write_word_data(_addr, 0);				\
+	else								\
+		ec_write_word_data(RESET_LEDS, 0);			\
+}
 
-static struct ec_led ec_orange_led = {
-	.cdev = {
-		.name			= "power-button:orange",
-		.brightness_set		= ec_led_set,
-		.max_brightness		= 1,
-	},
-};
+EC_LED(white, POWER_LED_ON);
+EC_LED(orange, CHARGE_LED_ON);
 
 static int ec_leds_probe(struct platform_device *pdev)
 {
@@ -89,8 +80,8 @@ static int ec_leds_probe(struct platform_device *pdev)
 	}
 
 	if (of_property_read_bool(np, "leds-reset")) {
-		led_set_brightness(&ec_white_led.cdev, 0);
-		led_set_brightness(&ec_orange_led.cdev, 0);
+		ec_write_word_data(RESET_LEDS, 0);
+		ec_write_word_data(ANDROID_LEDS_OFF, 0);
 	}
 
 	return 0;
@@ -98,10 +89,7 @@ static int ec_leds_probe(struct platform_device *pdev)
 
 static int ec_leds_remove(struct platform_device *pdev)
 {
-	cancel_work_sync(&ec_white_led.work);
 	led_classdev_unregister(&ec_white_led.cdev);
-
-	cancel_work_sync(&ec_orange_led.work);
 	led_classdev_unregister(&ec_orange_led.cdev);
 
 	return 0;
