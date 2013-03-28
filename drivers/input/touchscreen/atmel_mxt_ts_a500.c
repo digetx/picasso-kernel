@@ -150,10 +150,10 @@
 #define MXT224_RESET_TIME       65      /* msec */
 #define MXT768E_RESET_TIME	250	/* msec */
 #define MXT1386_RESET_TIME      200     /* msec */
-#define MXT_RESET_TIME		500	/* msec */
+#define MXT_RESET_TIME		200	/* msec */
 #define MXT_RESET_NOCHGREAD     400     /* msec */
 
-#define MXT_WAKEUP_TIME		45	/* msec */
+#define MXT_WAKEUP_TIME		25	/* msec */
 
 #define MXT_FWRESET_TIME	175	/* msec */
 
@@ -201,6 +201,8 @@
 
 #define RESUME_READS		100
 
+#define MXT_DEFAULT_PRESSURE	100
+
 struct mxt_info {
 	u8 family_id;
 	u8 variant_id;
@@ -234,12 +236,14 @@ struct mxt_finger {
 	int x;
 	int y;
 	int area;
+	int pressure;
 };
 
 /* Each client has this additional data */
 struct mxt_data {
 	struct i2c_client *client;
 	struct input_dev *input_dev;
+	char phys[64];		/* device physical location */
 	const struct mxt_platform_data *pdata;
 	struct mxt_object *object_table;
 	struct mxt_info info;
@@ -253,6 +257,7 @@ struct mxt_data {
 	u8 idle_cycle_time;
 	u8 actv2idle_timeout;
 	u8 is_stopped;
+	struct mutex access_mutex;
 #if defined(CONFIG_PM_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
@@ -266,6 +271,9 @@ struct mxt_data {
 	u8 slowscan_shad_actv_cycle_time;
 	u8 slowscan_shad_idle_cycle_time;
 	u8 slowscan_shad_actv2idle_timeout;
+	bool android;
+	bool use_multislot_proto;
+	void (*report) (struct mxt_data *data);
 };
 
 #if defined(CONFIG_PM_EARLYSUSPEND)
@@ -420,6 +428,8 @@ static int __mxt_read_reg(struct i2c_client *client,
 	buf[0] = reg & 0xff;
 	buf[1] = (reg >> 8) & 0xff;
 
+	mutex_lock(&data->access_mutex);
+
 	if ((data->last_address != reg) || (reg != data->msg_address)) {
 		if (i2c_master_send(client, (u8 *)buf, 2) != 2) {
 			dev_dbg(&client->dev, "i2c retry\n");
@@ -449,6 +459,7 @@ static int __mxt_read_reg(struct i2c_client *client,
 	data->last_address = reg;
 
 mxt_read_exit:
+	mutex_unlock(&data->access_mutex);
 	return retval;
 }
 
@@ -467,6 +478,7 @@ static int mxt_write_reg(struct i2c_client *client, u16 reg, u8 val)
 	buf[1] = (reg >> 8) & 0xff;
 	buf[2] = val;
 
+	mutex_lock(&data->access_mutex);
 	if (i2c_master_send(client, buf, 3) != 3) {
 		dev_dbg(&client->dev, "i2c retry\n");
 		msleep(MXT_WAKEUP_TIME);
@@ -480,6 +492,7 @@ static int mxt_write_reg(struct i2c_client *client, u16 reg, u8 val)
 	data->last_address = reg + 1;
 
 mxt_write_exit:
+	mutex_unlock(&data->access_mutex);
 	return retval;
 }
 
@@ -542,14 +555,14 @@ static int mxt_write_object(struct mxt_data *data,
 	u16 reg;
 
 	object = mxt_get_object(data, type);
-	if (!object)
+	if (!object || offset >= object->size + 1)
 		return -EINVAL;
 
 	reg = object->start_address;
 	return mxt_write_reg(data->client, reg + offset, val);
 }
 
-static void mxt_input_report(struct mxt_data *data)
+static void mxt_input_report_android(struct mxt_data *data)
 {
 	struct mxt_finger *finger = data->finger;
 	struct input_dev *input_dev = data->input_dev;
@@ -560,31 +573,78 @@ static void mxt_input_report(struct mxt_data *data)
 		if (!finger[id].status)
 			continue;
 
-		input_mt_slot(input_dev, id);
-
-		input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
-				finger[id].status != MXT_RELEASE ?
-				finger[id].area : 0);
+		if (data->use_multislot_proto) {
+			input_mt_slot(input_dev, id);
+			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
+					 finger[id].status != MXT_RELEASE ?
+							finger[id].area : 0);
+		}
 
 		if (finger[id].status == MXT_RELEASE) {
 			finger[id].status = 0;
-			input_report_abs(input_dev, ABS_MT_TRACKING_ID, -1);
-		}
-		else {
+			if (data->use_multislot_proto)
+				input_report_abs(input_dev,
+						 ABS_MT_TRACKING_ID, -1);
+		} else {
 			finger_num++;
 			input_report_abs(input_dev, ABS_MT_TRACKING_ID, id);
+
+			if (!data->use_multislot_proto) {
+				input_report_abs(input_dev, ABS_MT_POSITION_X,
+						 finger[id].x);
+
+				input_report_abs(input_dev, ABS_MT_POSITION_Y,
+						 finger[id].y);
+
+				input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
+						 finger[id].area);
+			}
 		}
 
-		input_report_abs(input_dev, ABS_MT_POSITION_X,
-				finger[id].x);
+		if (data->use_multislot_proto) {
+			input_report_abs(input_dev, ABS_MT_POSITION_X,
+					 finger[id].x);
 
-		input_report_abs(input_dev, ABS_MT_POSITION_Y,
-				finger[id].y);
+			input_report_abs(input_dev, ABS_MT_POSITION_Y,
+					 finger[id].y);
+		} else
+			input_mt_sync(input_dev);
 	}
 
-	input_report_key(input_dev, BTN_TOOL_FINGER, finger_num);
+	input_report_key(input_dev, BTN_TOOL_FINGER, !!finger_num);
 
 	input_sync(input_dev);
+}
+
+/* TODO: multitouch */
+static void mxt_input_report_native(struct mxt_data *data)
+{
+	struct mxt_finger *finger = data->finger;
+	struct input_dev *input_dev = data->input_dev;
+	int id;
+
+	for (id = 0; id < MXT_MAX_FINGER; id++) {
+		if (!finger[id].status)
+			continue;
+
+		if (finger[id].status == MXT_RELEASE) {
+			finger[id].status = 0;
+			input_report_key(input_dev, BTN_TOUCH, 0);
+		} else {
+			input_report_key(input_dev, BTN_TOUCH, 1);
+			input_report_abs(input_dev, ABS_X, finger[id].x);
+			input_report_abs(input_dev, ABS_Y, finger[id].y);
+		}
+		
+		input_report_abs(input_dev, ABS_PRESSURE, finger[id].pressure);
+	}
+
+	input_sync(input_dev);
+}
+
+static void mxt_input_report(struct mxt_data *data)
+{
+	data->report(data);
 }
 
 static void mxt_input_touchevent(struct mxt_data *data,
@@ -596,6 +656,7 @@ static void mxt_input_touchevent(struct mxt_data *data,
 	int x;
 	int y;
 	int area;
+	int pressure;
 
 	/* Check the touch is present on the screen */
 	if (!(status & MXT_DETECT)) {
@@ -603,6 +664,7 @@ static void mxt_input_touchevent(struct mxt_data *data,
 			dev_dbg(dev, "[%d] released\n", id);
 
 			finger[id].status = MXT_RELEASE;
+			finger[id].pressure = 0;
 			mxt_input_report(data);
 		}
 		return;
@@ -620,6 +682,10 @@ static void mxt_input_touchevent(struct mxt_data *data,
 		y = y >> 2;
 
 	area = message->message[4];
+	pressure = message->message[5];
+
+	if ((pressure <= 0) || (pressure > 255))
+		pressure = MXT_DEFAULT_PRESSURE;
 
 	dev_dbg(dev, "[%d] %s x: %d, y: %d, area: %d\n", id,
 		status & MXT_MOVE ? "moved" : "pressed",
@@ -630,6 +696,7 @@ static void mxt_input_touchevent(struct mxt_data *data,
 	finger[id].x = x;
 	finger[id].y = y;
 	finger[id].area = area;
+	finger[id].pressure = pressure;
 
 	mxt_input_report(data);
 }
@@ -1430,8 +1497,8 @@ static const struct attribute_group mxt_attr_group = {
 
 static void mxt_start(struct mxt_data *data)
 {
-	int error;
 	struct device *dev = &data->client->dev;
+	int error;
 
 	dev_info(dev, "mxt_start:  is_stopped = %d\n", data->is_stopped);
 	if (data->is_stopped == 0)
@@ -1451,8 +1518,8 @@ static void mxt_start(struct mxt_data *data)
 
 static void mxt_stop(struct mxt_data *data)
 {
-	int error;
 	struct device *dev = &data->client->dev;
+	int error;
 
 	dev_info(dev, "mxt_stop:  is_stopped = %d\n", data->is_stopped);
 	if (data->is_stopped)
@@ -1486,9 +1553,10 @@ static void mxt_input_close(struct input_dev *dev)
 	mxt_stop(data);
 }
 
-static struct mxt_platform_data *mxt_parse_dt(struct i2c_client *client)
+static struct mxt_platform_data *mxt_parse_dt(struct i2c_client *client,
+					      struct mxt_data *data,
+					      struct device_node *of_node)
 {
-	struct device_node *of_node = client->dev.of_node;
 	struct mxt_platform_data *pdata;
 	struct property *prop;
 	u32 val, length, cells;
@@ -1523,24 +1591,24 @@ static struct mxt_platform_data *mxt_parse_dt(struct i2c_client *client)
 		return NULL;
 	pdata->config = config;
 
+	if (of_property_read_bool(of_node, "android-evdev")) {
+		data->android = true;
+
+		if (of_property_read_bool(of_node, "multislot-proto"))
+			data->use_multislot_proto = true;
+	}
+
 	return pdata;
 }
 
 static int mxt_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
-	struct mxt_platform_data *pdata = client->dev.platform_data;
+	struct device_node *np = client->dev.of_node;
+	struct mxt_platform_data *pdata;
 	struct mxt_data *data;
 	struct input_dev *input_dev;
 	int error;
-
-	if (!pdata && client->dev.of_node)
-		pdata = mxt_parse_dt(client);
-
-	if (!pdata) {
-		dev_err(&client->dev, "No platform_data\n");
-		return -EINVAL;
-	}
 
 	data = devm_kzalloc(&client->dev, sizeof(*data), GFP_KERNEL);
 	input_dev = input_allocate_device();
@@ -1550,11 +1618,21 @@ static int mxt_probe(struct i2c_client *client,
 		goto err_free_mem;
 	}
 
+	pdata = mxt_parse_dt(client, data, np);
+	if (!pdata) {
+		dev_err(&client->dev, "No platform_data\n");
+		return -EINVAL;
+	}
+
 	input_dev->name = "atmel-maxtouch";
+	snprintf(data->phys, sizeof(data->phys), "i2c-%u-%04x/input0",
+		 client->adapter->nr, client->addr);
+	input_dev->phys = data->phys;
 	input_dev->id.bustype = BUS_I2C;
 	input_dev->dev.parent = &client->dev;
 	input_dev->open = mxt_input_open;
 	input_dev->close = mxt_input_close;
+	input_dev->hint_events_per_packet = 256U;
 
 	data->client = client;
 	data->input_dev = input_dev;
@@ -1564,32 +1642,47 @@ static int mxt_probe(struct i2c_client *client,
 
 	mxt_calc_resolution(data);
 
-	__set_bit(BTN_TOOL_FINGER, input_dev->keybit);
 	__set_bit(EV_ABS, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
-	__set_bit(EV_SYN, input_dev->evbit);
 
-	__set_bit(ABS_MT_TOUCH_MAJOR, input_dev->absbit);
-	__set_bit(ABS_MT_POSITION_X, input_dev->absbit);
-	__set_bit(ABS_MT_POSITION_Y, input_dev->absbit);
-	__set_bit(ABS_X, input_dev->absbit);
-	__set_bit(ABS_Y, input_dev->absbit);
+	if (data->android) {
+		__set_bit(BTN_TOOL_FINGER, input_dev->keybit);
+		__set_bit(EV_SYN, input_dev->evbit);
+		__set_bit(ABS_MT_TOUCH_MAJOR, input_dev->absbit);
+		__set_bit(ABS_MT_POSITION_X, input_dev->absbit);
+		__set_bit(ABS_MT_POSITION_Y, input_dev->absbit);
 
-	/* For single touch */
-	input_set_abs_params(input_dev, ABS_X, 0, data->max_x, 0, 0);
-	input_set_abs_params(input_dev, ABS_Y, 0, data->max_y, 0, 0);
+		data->report = mxt_input_report_android;
 
-	/* For multi touch */
-#ifndef CONFIG_HC_EVENT_REPORTING
-	input_mt_init_slots(input_dev, MXT_MAX_FINGER, 0);
-#endif
-	input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0, data->max_x, 0, 0);
-	input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0, data->max_y, 0, 0);
-	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, MXT_MAX_AREA, 0, 0);
-	input_set_abs_params(input_dev, ABS_MT_TRACKING_ID, 0, MXT_MAX_FINGER, 0, 0);
+		if (data->use_multislot_proto)
+			input_mt_init_slots(input_dev, MXT_MAX_FINGER, 0);
+
+		input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
+				     0, MXT_MAX_AREA, 0, 0);
+		input_set_abs_params(input_dev, ABS_MT_POSITION_X,
+				     0, data->max_x, 0, 0);
+		input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
+				     0, data->max_y, 0, 0);
+	} else {
+		__set_bit(BTN_TOUCH, input_dev->keybit);
+		__set_bit(ABS_X, input_dev->absbit);
+		__set_bit(ABS_Y, input_dev->absbit);
+		__set_bit(ABS_PRESSURE, input_dev->absbit);
+
+		data->report = mxt_input_report_native;
+
+		input_set_abs_params(input_dev, ABS_X,
+				     0, data->max_x, 0, 0);
+		input_set_abs_params(input_dev, ABS_Y,
+				     0, data->max_y, 0, 0);
+		input_set_abs_params(input_dev, ABS_PRESSURE,
+				     0, 255, 0, 0);
+	}
 
 	input_set_drvdata(input_dev, data);
 	i2c_set_clientdata(client, data);
+
+	mutex_init(&data->access_mutex);
 
 	error = mxt_initialize(data);
 	if (error)
@@ -1603,13 +1696,6 @@ static int mxt_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Failed to register interrupt\n");
 		goto err_free_object;
 	}
-
-#if defined(CONFIG_PM_EARLYSUSPEND)
-	data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	data->early_suspend.suspend = mxt_early_suspend;
-	data->early_suspend.resume = mxt_early_resume;
-	register_early_suspend(&data->early_suspend);
-#endif
 
 	error = mxt_make_highchg(data);
 	if (error) {
@@ -1636,11 +1722,19 @@ static int mxt_probe(struct i2c_client *client,
 	data->mem_access_attr.write = mxt_mem_access_write;
 	data->mem_access_attr.size = 65535;
 
-	if (sysfs_create_bin_file(&client->dev.kobj, &data->mem_access_attr) < 0) {
+	if (sysfs_create_bin_file(&client->dev.kobj,
+				  &data->mem_access_attr) < 0) {
 		dev_err(&client->dev, "Failed to create %s\n",
 					data->mem_access_attr.attr.name);
 		goto err_unregister_device;
 	}
+
+#if defined(CONFIG_PM_EARLYSUSPEND)
+	data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
+	data->early_suspend.suspend = mxt_early_suspend;
+	data->early_suspend.resume = mxt_early_resume;
+	register_early_suspend(&data->early_suspend);
+#endif
 
 	return 0;
 
@@ -1658,6 +1752,9 @@ static int mxt_remove(struct i2c_client *client)
 {
 	struct mxt_data *data = i2c_get_clientdata(client);
 
+#if defined(CONFIG_PM_EARLYSUSPEND)
+	unregister_early_suspend(&data->early_suspend);
+#endif
 	sysfs_remove_bin_file(&client->dev.kobj, &data->mem_access_attr);
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
 	input_unregister_device(data->input_dev);
@@ -1666,7 +1763,7 @@ static int mxt_remove(struct i2c_client *client)
 	return 0;
 }
 
-#ifdef CONFIG_PM
+#ifdef CONFIG_PM_SLEEP
 static int mxt_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -1685,15 +1782,15 @@ static int mxt_suspend(struct device *dev)
 
 static int mxt_resume(struct device *dev)
 {
-	int error;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct mxt_data *data = i2c_get_clientdata(client);
 	struct input_dev *input_dev = data->input_dev;
 	struct mxt_finger *finger = data->finger;
-	int id;
+	int error, id;
 
 	/* Soft reset */
-	error = mxt_write_object(data, MXT_GEN_COMMAND_T6, MXT_COMMAND_RESET, 1);
+	error = mxt_write_object(data, MXT_GEN_COMMAND_T6,
+				 MXT_COMMAND_RESET, 1);
 
 	if (error)
 		dev_err(dev, "MXT failed to resume\n");
@@ -1707,24 +1804,25 @@ static int mxt_resume(struct device *dev)
 
 	mutex_unlock(&input_dev->mutex);
 
-#ifdef CONFIG_HC_EVENT_REPORTING
-	for (id = 0; id < MXT_MAX_FINGER; id++) {
-		if (!finger[id].status)
-			continue;
+	if (data->android) {
+		/* clear userspace slots state */
+		for (id = 0; id < MXT_MAX_FINGER; id++) {
+			finger[id].status = 0;
 
-		finger[id].status = 0;
-		input_mt_sync(input_dev);
+			if (data->use_multislot_proto) {
+				input_mt_slot(input_dev, id);
+				input_report_abs(input_dev,
+						 ABS_MT_TRACKING_ID, -1);
+			} else {
+				if (!finger[id].status)
+					continue;
+
+				input_mt_sync(input_dev);
+			}
+		}
+		input_sync(input_dev);
 	}
-#else
-	for (id = 0; id < MXT_MAX_FINGER; id++) {
-		input_mt_slot(input_dev, id);
 
-		finger[id].status = 0;
-		input_report_abs(input_dev, ABS_MT_TRACKING_ID, -1);
-	}
-#endif
-
-	input_sync(input_dev);
 
 	return 0;
 }
@@ -1769,7 +1867,7 @@ static const struct i2c_device_id mxt_id[] = {
 MODULE_DEVICE_TABLE(i2c, mxt_id);
 
 static const struct of_device_id mxt_dt_ids[] = {
-	{ .compatible = "atmel,mxt-ts a500" },
+	{ .compatible = "atmel,mxt-ts-a500" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, mxt_dt_ids);

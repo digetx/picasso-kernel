@@ -456,10 +456,13 @@
 		clock-frequency = <400000>;
 
 		touchscreen@4c {
-			compatible = "atmel,mxt-ts a500";
+			compatible = "atmel,mxt-ts-a500";
 			reg = <0x4c>;
 			interrupt-parent = <&gpio>;
 			interrupts = <174 0x2>;
+
+			android-evdev;
+			multislot-proto;
 
 			x-size = <1280>;
 			y-size = <800>;
