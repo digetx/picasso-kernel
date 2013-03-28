@@ -431,7 +431,6 @@ struct tegra_udc {
 	unsigned softconnect:1;
 	unsigned vbus_active:1;
 	unsigned stopped:1;
-	unsigned remote_wakeup:1;
 	unsigned selfpowered:1;
 	bool has_hostpc;
 };

@@ -1186,29 +1186,6 @@ static int tegra_get_frame(struct usb_gadget *gadget)
 						& USB_FRINDEX_MASKS);
 }
 
-#ifndef CONFIG_USB_ANDROID
-/* Tries to wake up the host connected to this gadget */
-static int tegra_wakeup(struct usb_gadget *gadget)
-{
-	struct tegra_udc *udc = container_of(gadget, struct tegra_udc, gadget);
-	u32 portsc;
-
-	/* Remote wakeup feature not enabled by host */
-	if (!udc->remote_wakeup)
-		return -ENOTSUPP;
-
-	portsc = udc_readl(udc, PORTSCX_REG_OFFSET);
-	/* not suspended? */
-	if (!(portsc & PORTSCX_PORT_SUSPEND))
-		return 0;
-
-	/* trigger force resume */
-	portsc |= PORTSCX_PORT_FORCE_RESUME;
-	udc_writel(udc, portsc, PORTSCX_REG_OFFSET);
-	return 0;
-}
-#endif
-
 static int tegra_set_selfpowered(struct usb_gadget *gadget, int is_on)
 {
 	struct tegra_udc *udc;
@@ -1319,9 +1296,6 @@ static int tegra_udc_stop(struct usb_gadget_driver *driver);
 /* defined in gadget.h */
 static struct usb_gadget_ops tegra_gadget_ops = {
 	.get_frame = tegra_get_frame,
-#ifndef CONFIG_USB_ANDROID
-	.wakeup = tegra_wakeup,
-#endif
 	.set_selfpowered = tegra_set_selfpowered,
 	.vbus_session = tegra_vbus_session,
 	.vbus_draw = tegra_vbus_draw,
@@ -1431,7 +1405,6 @@ static void ch9getstatus(struct tegra_udc *udc, u8 request_type, u16 value,
 		/* Get device status */
 		if (udc->selfpowered)
 			tmp = 1 << USB_DEVICE_SELF_POWERED;
-		tmp |= udc->remote_wakeup << USB_DEVICE_REMOTE_WAKEUP;
 	} else if ((request_type & USB_RECIP_MASK) == USB_RECIP_INTERFACE) {
 		/* Get interface status
 		 * We don't have interface information in udc driver */
@@ -1996,7 +1969,6 @@ static void reset_irq(struct tegra_udc *udc)
 	udc->resume_state = 0;
 	udc->ep0_dir = 0;
 	udc->ep0_state = WAIT_FOR_SETUP;
-	udc->remote_wakeup = 0;	/* default to 0 on reset */
 	udc->gadget.b_hnp_enable = 0;
 	udc->gadget.a_hnp_support = 0;
 	udc->gadget.a_alt_hnp_support = 0;
@@ -2330,7 +2302,6 @@ static int tegra_udc_setup_qh(struct tegra_udc *udc)
 	udc->resume_state = USB_STATE_NOTATTACHED;
 	udc->usb_state = USB_STATE_POWERED;
 	udc->ep0_dir = 0;
-	udc->remote_wakeup = 0;	/* default to 0 on reset */
 
 	return 0;
 }
