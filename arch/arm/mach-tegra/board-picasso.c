@@ -25,6 +25,9 @@
 #include <linux/wlan_plat.h>
 #include <linux/delay.h>
 #include <linux/platform_data/mmc-sdhci-tegra.h>
+#include <linux/uaccess.h>
+#include <linux/syscalls.h>
+#include <linux/reboot.h>
 
 #include "board-picasso.h"
 #include "clock.h"
@@ -278,6 +281,48 @@ void change_power_brcm_4329(bool enable)
 	spin_unlock_irqrestore(&brcm_4329_enable_lock, flags);
 }
 
+/******************************************************************************
+* Reboot cmd
+*****************************************************************************/
+static void picasso_reboot_cmd(char *cmd)
+{
+	struct file *fp;
+	mm_segment_t oldfs;
+
+	fp = filp_open("/dev/block/mmcblk0p5", O_RDWR | O_LARGEFILE, 0);
+	if (!fp)
+		return;
+
+	oldfs = get_fs();
+	set_fs( get_ds() );
+
+	pr_emerg("%s: %s\n", __func__, cmd);
+	fp->f_op->write(fp, cmd, strlen(cmd), &fp->f_pos);
+
+	set_fs(oldfs);
+	filp_close(fp, 0);
+
+	sys_sync();
+}
+
+static int picasso_reboot_event(struct notifier_block *notifier,
+				unsigned long event, void *cmd)
+{
+	if (event == SYS_RESTART && cmd != NULL) {
+		if (!strncmp(cmd, "recovery", 8))
+			picasso_reboot_cmd("FOTA");
+		else if (!strncmp(cmd, "bootloader", 10))
+			picasso_reboot_cmd("FastbootMode");
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block picasso_reboot_notifier = {
+	.notifier_call = picasso_reboot_event,
+	.priority = INT_MAX,
+};
+
 static __initdata struct tegra_clk_init_table tegra_picasso_clk_init_table[] = {
 	{ "pwm",	"clk_m",	12000000,	false },
 	{ NULL,		NULL,		0,		0 },
@@ -299,4 +344,5 @@ void __init picasso_machine_init(void)
 	picasso_wifi_init();
 
 	tegra_init_suspend(&picasso_sparams);
+	register_reboot_notifier(&picasso_reboot_notifier);
 }
