@@ -382,17 +382,10 @@
 		status = "disabled";
 	};
 
-	sdhci@c8000000 {
+	sdhci@c8000600 {
 		compatible = "nvidia,tegra20-sdhci";
-		reg = <0xc8000000 0x200>;
-		interrupts = <0 14 0x04>;
-		status = "disabled";
-	};
-
-	sdhci@c8000200 {
-		compatible = "nvidia,tegra20-sdhci";
-		reg = <0xc8000200 0x200>;
-		interrupts = <0 15 0x04>;
+		reg = <0xc8000600 0x200>;
+		interrupts = <0 31 0x04>;
 		status = "disabled";
 	};
 
@@ -403,10 +396,17 @@
 		status = "disabled";
 	};
 
-	sdhci@c8000600 {
+	sdhci@c8000200 {
 		compatible = "nvidia,tegra20-sdhci";
-		reg = <0xc8000600 0x200>;
-		interrupts = <0 31 0x04>;
+		reg = <0xc8000200 0x200>;
+		interrupts = <0 15 0x04>;
+		status = "disabled";
+	};
+
+	sdhci@c8000000 {
+		compatible = "nvidia,tegra20-sdhci";
+		reg = <0xc8000000 0x200>;
+		interrupts = <0 14 0x04>;
 		status = "disabled";
 	};
 
