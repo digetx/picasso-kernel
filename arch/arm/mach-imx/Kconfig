@@ -167,12 +167,14 @@ config SOC_IMX5
 config SOC_IMX50
 	bool
 	select ARCH_MX50
+	select ARM_L1_CACHE_SHIFT_6
 	select SOC_IMX5
 
 config	SOC_IMX51
 	bool
 	select ARCH_MX5
 	select ARCH_MX51
+	select ARM_L1_CACHE_SHIFT_6
 	select PINCTRL
 	select PINCTRL_IMX51
 	select SOC_IMX5
@@ -827,6 +829,7 @@ config	SOC_IMX53
 	bool "i.MX53 support"
 	select ARCH_MX5
 	select ARCH_MX53
+	select ARM_L1_CACHE_SHIFT_6
 	select HAVE_CAN_FLEXCAN if CAN
 	select IMX_HAVE_PLATFORM_IMX2_WDT
 	select PINCTRL

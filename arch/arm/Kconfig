@@ -803,6 +803,7 @@ config ARCH_S5PC100
 	select ARCH_USES_GETTIMEOFFSET
 	select CLKDEV_LOOKUP
 	select CPU_V7
+	select ARM_L1_CACHE_SHIFT_6
 	select GENERIC_GPIO
 	select HAVE_CLK
 	select HAVE_S3C2410_I2C if I2C
@@ -820,6 +821,7 @@ config ARCH_S5PV210
 	select CLKDEV_LOOKUP
 	select CLKSRC_MMIO
 	select CPU_V7
+	select ARM_L1_CACHE_SHIFT_6
 	select GENERIC_CLOCKEVENTS
 	select GENERIC_GPIO
 	select HAVE_CLK
