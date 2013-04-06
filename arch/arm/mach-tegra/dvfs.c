@@ -76,10 +76,10 @@ struct dvfs_domain {
 #define CORE_MAX_VDD		1300
 #define CORE_NOMINAL_VDD	1225
 
-#define CORE_MILLIVOLTS		1100,	1100,	1100,	1150, \
-				1200,	1225,	1275,	CORE_MAX_VDD
+#define CORE_MILLIVOLTS		1100,	1125,	1150,	1200, \
+				1225,	1250,	1275,	CORE_MAX_VDD
 
-#define EMC_FREQS		50000,	150000,	300000,	600000
+#define EMC_FREQS		0,	150000,	300000,	600000
 
 #define DISP1_FREQS		158000,	158000,	190000
 
@@ -103,7 +103,7 @@ struct dvfs_domain {
 				72000
 
 #define SCLK_FREQS		123500,	159500,	207000,	240000, \
-				240000,	264000,	277500
+				264000,	277500
 
 #define VDE_FREQS		123500,	152000,	237500,	300000
 
@@ -126,8 +126,20 @@ DVFS(cpu, CPU_MILLIVOLTS, &dvfs_cpu_client);
 
 // DVFS_CLIENT(disp1, DISP1_FREQS);
 // DVFS_CLIENT(disp2, DISP2_FREQS);
-// DVFS_CLIENT(hdmi, HDMI_FREQS);
-// DVFS_CLIENT(emc, EMC_FREQS);
+DVFS_CLIENT(hdmi, HDMI_FREQS);
+DVFS_CLIENT(avp_emc, EMC_FREQS);
+DVFS_CLIENT(cpu_emc, EMC_FREQS);
+DVFS_CLIENT(disp1_emc, EMC_FREQS);
+DVFS_CLIENT(disp2_emc, EMC_FREQS);
+DVFS_CLIENT(hdmi_emc, EMC_FREQS);
+DVFS_CLIENT(3d_emc, EMC_FREQS);
+DVFS_CLIENT(2d_emc, EMC_FREQS);
+DVFS_CLIENT(mpe_emc, EMC_FREQS);
+DVFS_CLIENT(usbd_emc, EMC_FREQS);
+DVFS_CLIENT(usb1_emc, EMC_FREQS);
+DVFS_CLIENT(usb2_emc, EMC_FREQS);
+DVFS_CLIENT(usb3_emc, EMC_FREQS);
+DVFS_CLIENT(camera_emc, EMC_FREQS);
 DVFS_CLIENT(host1x, HOST1X_FREQS);
 DVFS_CLIENT(epp, EPP_FREQS);
 DVFS_CLIENT(2d, V2D_FREQS);
@@ -142,8 +154,12 @@ DVFS_CLIENT(usbd, USBD_FREQS);
 DVFS_CLIENT(usb2, USB2_FREQS);
 DVFS_CLIENT(usb3, USB3_FREQS);
 DVFS(core, CORE_MILLIVOLTS,
-	/*&dvfs_disp1_client,	&dvfs_disp2_client,	&dvfs_hdmi_client,
-	&dvfs_emc_client,*/	&dvfs_host1x_client,	&dvfs_epp_client,
+	/*&dvfs_disp1_client,	&dvfs_disp2_client,*/	&dvfs_hdmi_client,
+	&dvfs_avp_emc_client,	&dvfs_cpu_emc_client,	&dvfs_disp1_emc_client,
+	&dvfs_disp2_emc_client,	&dvfs_hdmi_emc_client,	&dvfs_2d_emc_client,
+	&dvfs_3d_emc_client,	&dvfs_mpe_emc_client,	&dvfs_usbd_emc_client,
+	&dvfs_usb1_emc_client,	&dvfs_usb2_emc_client,	&dvfs_usb3_emc_client,
+	&dvfs_camera_emc_client,&dvfs_host1x_client,	&dvfs_epp_client,
 	&dvfs_2d_client,	&dvfs_3d_client,	&dvfs_mpe_client,
 	&dvfs_vi_client,	&dvfs_csi_client,	&dvfs_sclk_client,
 	&dvfs_vde_client,	&dvfs_mipi_client,	&dvfs_usbd_client,
@@ -379,7 +395,7 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 	struct clk_notifier_data *cnd = data;
 
 	switch (flags) {
-	case PRE_RATE_CHANGE:
+	case PRE_RATE_SET:
 		/*
 		 * Perform update before going from low to high
 		 */
@@ -396,7 +412,7 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 		}
 		break;
 
-	case POST_RATE_CHANGE:
+	case POST_RATE_SET:
 		/*
 		 * Perform update after going from high to low
 		 */
@@ -471,12 +487,13 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 
 static void dvfs_init(struct dvfs_domain *dvfs)
 {
-	int i, ret;
+	int i;
 
 	INIT_LIST_HEAD(&dvfs->active_clients);
 
 	for (i = 0; dvfs->clients[i] != NULL; i++) {
 		struct dvfs_client *client = dvfs->clients[i];
+		int ret;
 
 		client->clk = devm_clk_get(dvfs_dev, client->clk_name);
 		if (IS_ERR(client->clk)) {

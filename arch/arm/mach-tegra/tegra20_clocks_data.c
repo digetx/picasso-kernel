@@ -1141,7 +1141,6 @@ static struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("pll_p_out3", "tegra-i2c.3", "fast-clk"),
 	CLK_DUPLICATE("cclk",        NULL,         "cpu"),
 
-	CLK_DUPLICATE("emc",         "tegra-dvfs",   "emc"),
 	CLK_DUPLICATE("disp1",       "tegra-dvfs",   "disp1"),
 	CLK_DUPLICATE("disp2",       "tegra-dvfs",   "disp2"),
 	CLK_DUPLICATE("hdmi",        "tegra-dvfs",   "hdmi"),
@@ -1157,6 +1156,19 @@ static struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("usbd",        "tegra-dvfs",   "usbd"),
 	CLK_DUPLICATE("usb2",        "tegra-dvfs",   "usb2"),
 	CLK_DUPLICATE("usb3",        "tegra-dvfs",   "usb3"),
+	CLK_DUPLICATE("avp_emc",     "tegra-dvfs",   "avp_emc"),
+	CLK_DUPLICATE("cpu_emc",     "tegra-dvfs",   "cpu_emc"),
+	CLK_DUPLICATE("disp1_emc",   "tegra-dvfs",   "disp1_emc"),
+	CLK_DUPLICATE("disp2_emc",   "tegra-dvfs",   "disp2_emc"),
+	CLK_DUPLICATE("hdmi_emc",    "tegra-dvfs",   "hdmi_emc"),
+	CLK_DUPLICATE("3d_emc",      "tegra-dvfs",   "3d_emc"),
+	CLK_DUPLICATE("2d_emc",      "tegra-dvfs",   "2d_emc"),
+	CLK_DUPLICATE("mpe_emc",     "tegra-dvfs",   "mpe_emc"),
+	CLK_DUPLICATE("usbd_emc",    "tegra-dvfs",   "usbd_emc"),
+	CLK_DUPLICATE("usb1_emc",    "tegra-dvfs",   "usb1_emc"),
+	CLK_DUPLICATE("usb2_emc",    "tegra-dvfs",   "usb2_emc"),
+	CLK_DUPLICATE("usb3_emc",    "tegra-dvfs",   "usb3_emc"),
+	CLK_DUPLICATE("camera_emc",  "tegra-dvfs",   "camera_emc"),
 };
 
 #define CLK(dev, con, ck)	\
