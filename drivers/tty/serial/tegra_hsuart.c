@@ -464,6 +464,11 @@ static void tegra_handle_rx_dma(struct tegra_uart_port *t)
 	bool stopped = !(t->transfer_state & RX_DMA);
 	u32 bytes_transferred;
 
+	if (!tty) {
+		dev_err(u->dev, "No tty port\n");
+		return;
+	}
+
 	if (t->rts_active && !stopped)
 		set_rts(t, false);
 
@@ -475,6 +480,8 @@ static void tegra_handle_rx_dma(struct tegra_uart_port *t)
 		tegra_uart_copy_rx_to_tty(t, tty, bytes_transferred);
 
 	tegra_handle_rx_pio(t);
+
+	tty_kref_put(tty);
 
 	dev_dbg(u->dev, "%s transferred: %d of %d\n",
 		__func__, bytes_transferred, RX_DMA_BUFFER_SIZE);
