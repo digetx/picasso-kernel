@@ -49,6 +49,8 @@ struct clk;
 #define ABORT_RATE_CHANGE		BIT(2)
 #define PRE_ENABLE_CHANGE		BIT(3)
 #define POST_DISABLE_CHANGE		BIT(4)
+#define PRE_RATE_SET			BIT(5)
+#define POST_RATE_SET			BIT(6)
 
 /**
  * struct clk_notifier - associate a clk with a notifier
