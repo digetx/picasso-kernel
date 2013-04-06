@@ -1633,11 +1633,11 @@ struct clk_ops tegra_cdev_clk_ops = {
  * enabled shared_bus_user clock, with a minimum value set by the
  * shared bus.
  */
-static void tegra20_clk_shared_bus_init(struct clk_hw *hw)
+static void tegra20_clk_shared_user_init(struct clk_hw *hw)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
-	struct clk* bus_clk = __clk_get_parent(hw->clk);
-	struct clk_hw* bus_hw = __clk_get_hw(bus_clk);
+	struct clk *bus_clk = __clk_get_parent(hw->clk);
+	struct clk_hw *bus_hw = __clk_get_hw(bus_clk);
 	struct clk_tegra *bus = to_clk_tegra(bus_hw);
 
 	list_add_tail(&c->u.shared_bus_user.node, &bus->shared_bus_list);
@@ -1647,8 +1647,8 @@ static long tegra20_clk_shared_bus_round_rate(struct clk_hw *hw,
 				unsigned long rate, unsigned long *prate)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
-	struct clk* bus_clk = __clk_get_parent(hw->clk);
-	struct clk_hw* bus_hw = __clk_get_hw(bus_clk);
+	struct clk *bus_clk = __clk_get_parent(hw->clk);
+	struct clk_hw *bus_hw = __clk_get_hw(bus_clk);
 	struct clk_tegra *bus = to_clk_tegra(bus_hw);
 	struct clk_tegra *it;
 	unsigned long new_rate = 0;
@@ -1656,8 +1656,12 @@ static long tegra20_clk_shared_bus_round_rate(struct clk_hw *hw,
 	c->u.shared_bus_user.rate = rate;
 
 	list_for_each_entry(it, &bus->shared_bus_list, u.shared_bus_user.node) {
-		if (it->u.shared_bus_user.enabled)
+		if (it->u.shared_bus_user.enabled) {
+			pr_debug("%s %s: %lu\n", __func__,
+						 __clk_get_name(it->hw.clk),
+						 it->u.shared_bus_user.rate);
 			new_rate = max(it->u.shared_bus_user.rate, new_rate);
+		}
 	}
 
 	*prate = __clk_round_rate(bus_clk, new_rate);
@@ -1665,13 +1669,13 @@ static long tegra20_clk_shared_bus_round_rate(struct clk_hw *hw,
 	return rate;
 }
 
-static int tegra20_clk_shared_bus_set_rate(struct clk_hw *hw, unsigned long rate,
+static int tegra20_clk_shared_user_set_rate(struct clk_hw *hw, unsigned long rate,
 		unsigned long parent_rate)
 {
 	return 0;
 }
 
-static unsigned long tegra20_clk_shared_bus_recalc_rate(struct clk_hw *hw,
+static unsigned long tegra20_clk_shared_user_recalc_rate(struct clk_hw *hw,
 			unsigned long prate)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
@@ -1679,33 +1683,42 @@ static unsigned long tegra20_clk_shared_bus_recalc_rate(struct clk_hw *hw,
 	return c->u.shared_bus_user.rate;
 }
 
-static int tegra20_clk_shared_bus_enable(struct clk_hw *hw)
+static void tegra20_clk_shared_bus_update(struct clk_hw *hw, bool enabled)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
+	struct clk *bus_clk = __clk_get_parent(hw->clk);
+	unsigned long old_rate, new_rate;
 
-	c->u.shared_bus_user.enabled = true;
+	c->u.shared_bus_user.enabled = enabled;
 
-	__clk_set_rate(hw->clk, c->u.shared_bus_user.rate);
+	old_rate = __clk_get_rate(bus_clk);
+
+	tegra20_clk_shared_bus_round_rate(hw, c->u.shared_bus_user.rate,
+					  &new_rate);
+
+	if (new_rate != old_rate)
+		__clk_set_rate(bus_clk, new_rate);
+}
+
+static int tegra20_clk_shared_user_prepare(struct clk_hw *hw)
+{
+	tegra20_clk_shared_bus_update(hw, true);
 
 	return 0;
 }
 
-static void tegra20_clk_shared_bus_disable(struct clk_hw *hw)
+static void tegra20_clk_shared_user_unprepare(struct clk_hw *hw)
 {
-	struct clk_tegra *c = to_clk_tegra(hw);
-
-	c->u.shared_bus_user.enabled = false;
-
-	__clk_set_rate(hw->clk, c->u.shared_bus_user.rate);
+	tegra20_clk_shared_bus_update(hw, false);
 }
 
 struct clk_ops tegra_clk_shared_bus_ops = {
-	.init = tegra20_clk_shared_bus_init,
-	.enable = tegra20_clk_shared_bus_enable,
-	.disable = tegra20_clk_shared_bus_disable,
+	.init = tegra20_clk_shared_user_init,
+	.prepare = tegra20_clk_shared_user_prepare,
+	.unprepare = tegra20_clk_shared_user_unprepare,
 	.round_rate = tegra20_clk_shared_bus_round_rate,
-	.set_rate = tegra20_clk_shared_bus_set_rate,
-	.recalc_rate = tegra20_clk_shared_bus_recalc_rate,
+	.set_rate = tegra20_clk_shared_user_set_rate,
+	.recalc_rate = tegra20_clk_shared_user_recalc_rate,
 };
 
 /* Tegra20 CPU clock and reset control functions */
