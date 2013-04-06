@@ -1815,7 +1815,7 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 	struct i2c_adapter *ddc_i2c_adapter;
 	enum of_gpio_flags flags;
 	struct videomode vm;
-	int i, val, num_timings = 0;
+	int i, val;
 
 	dc_np = ndev->dev.of_node;
 
@@ -1826,10 +1826,6 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 	np = of_get_child_by_name(np, "display");
 	if (!np)
 		return NULL;
-
-	disp_timings = of_get_display_timings(np);
-	if (disp_timings)
-		num_timings = disp_timings->num_timings;
 
 	pdata = devm_kzalloc(&ndev->dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
@@ -1903,12 +1899,25 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 							&flags);
 	}
 
+	disp_timings = of_get_display_timings(np);
+	if (!disp_timings)
+		return NULL;
+
 	/* set video modes */
-	modes = devm_kzalloc(&ndev->dev, sizeof(*modes) * num_timings,
+	modes = devm_kzalloc(&ndev->dev,
+			     sizeof(*modes) * disp_timings->num_timings,
 			     GFP_KERNEL);
+	if (!modes) {
+		for (i = 0; i < disp_timings->num_timings; i++)
+			kfree(disp_timings->timings[i]);
+		kfree(disp_timings->timings);
+		kfree(disp_timings);
+		return NULL;
+	}
+
 	dc_out->modes = modes;
 
-	for (i = 0; i < num_timings; i++) {
+	for (i = 0; i < disp_timings->num_timings; i++) {
 		if (!videomode_from_timing(disp_timings, &vm, i)) {
 			/* TODO: Convert to direct use of videomode */
 			modes[dc_out->n_modes].pclk          = vm.pixelclock,
@@ -1925,7 +1934,12 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 
 			dc_out->n_modes++;
 		}
+
+		kfree(disp_timings->timings[i]);
 	}
+
+	kfree(disp_timings->timings);
+	kfree(disp_timings);
 
 	fb_data = devm_kzalloc(&ndev->dev, sizeof(*fb_data), GFP_KERNEL);
 	if (!fb_data)
