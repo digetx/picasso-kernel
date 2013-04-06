@@ -157,8 +157,7 @@ int tegra_rpc_port_create(struct tegra_rpc_info *info, char *name,
 		goto err;
 	}
 
-	name[TEGRA_RPC_MAX_NAME_LEN - 1] = '\0';
-	if (name[0]) {
+	if (name[0] && !WARN_ON(strlen(name) > TEGRA_RPC_MAX_NAME_LEN)) {
 		ret = _validate_port_name(name);
 		if (ret)
 			goto err;
