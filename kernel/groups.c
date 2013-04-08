@@ -94,6 +94,8 @@ static int groups_from_user(struct group_info *group_info,
 			return -EFAULT;
 
 		kgid = make_kgid(user_ns, gid);
+		if (!gid_valid(kgid))
+			return -EINVAL;
 
 		GROUP_AT(group_info, i) = kgid;
 	}
