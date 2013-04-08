@@ -1900,46 +1900,48 @@ static struct tegra_dc_platform_data *tegra_dc_parse_dt(struct nvhost_device *nd
 	}
 
 	disp_timings = of_get_display_timings(np);
-	if (!disp_timings)
-		return NULL;
-
-	/* set video modes */
-	modes = devm_kzalloc(&ndev->dev,
-			     sizeof(*modes) * disp_timings->num_timings,
-			     GFP_KERNEL);
-	if (!modes) {
-		for (i = 0; i < disp_timings->num_timings; i++)
-			kfree(disp_timings->timings[i]);
-		kfree(disp_timings->timings);
-		kfree(disp_timings);
-		return NULL;
-	}
-
-	dc_out->modes = modes;
-
-	for (i = 0; i < disp_timings->num_timings; i++) {
-		if (!videomode_from_timing(disp_timings, &vm, i)) {
-			/* TODO: Convert to direct use of videomode */
-			modes[dc_out->n_modes].pclk          = vm.pixelclock,
-			modes[dc_out->n_modes].h_ref_to_sync = 0, // ?
-			modes[dc_out->n_modes].v_ref_to_sync = 0, // ?
-			modes[dc_out->n_modes].h_sync_width  = vm.hsync_len,
-			modes[dc_out->n_modes].v_sync_width  = vm.vsync_len,
-			modes[dc_out->n_modes].h_back_porch  = vm.hback_porch,
-			modes[dc_out->n_modes].v_back_porch  = vm.vback_porch,
-			modes[dc_out->n_modes].h_active      = vm.hactive,
-			modes[dc_out->n_modes].v_active      = vm.vactive,
-			modes[dc_out->n_modes].h_front_porch = vm.hfront_porch,
-			modes[dc_out->n_modes].v_front_porch = vm.vfront_porch,
-
-			dc_out->n_modes++;
+	if (disp_timings) {
+		/* set video modes */
+		modes = devm_kzalloc(&ndev->dev,
+				sizeof(*modes) * disp_timings->num_timings,
+				GFP_KERNEL);
+		if (!modes) {
+			for (i = 0; i < disp_timings->num_timings; i++)
+				kfree(disp_timings->timings[i]);
+			kfree(disp_timings->timings);
+			kfree(disp_timings);
+			return NULL;
 		}
 
-		kfree(disp_timings->timings[i]);
-	}
+		dc_out->modes = modes;
 
-	kfree(disp_timings->timings);
-	kfree(disp_timings);
+		for (i = 0; i < disp_timings->num_timings; i++) {
+			if (!videomode_from_timing(disp_timings, &vm, i)) {
+				/* TODO: Convert to direct use of videomode */
+				struct tegra_dc_mode *mode =
+							&modes[dc_out->n_modes];
+
+				mode->pclk          = vm.pixelclock,
+				mode->h_ref_to_sync = 0, // ?
+				mode->v_ref_to_sync = 0, // ?
+				mode->h_sync_width  = vm.hsync_len,
+				mode->v_sync_width  = vm.vsync_len,
+				mode->h_back_porch  = vm.hback_porch,
+				mode->v_back_porch  = vm.vback_porch,
+				mode->h_active      = vm.hactive,
+				mode->v_active      = vm.vactive,
+				mode->h_front_porch = vm.hfront_porch,
+				mode->v_front_porch = vm.vfront_porch,
+
+				dc_out->n_modes++;
+			}
+
+			kfree(disp_timings->timings[i]);
+		}
+
+		kfree(disp_timings->timings);
+		kfree(disp_timings);
+	}
 
 	fb_data = devm_kzalloc(&ndev->dev, sizeof(*fb_data), GFP_KERNEL);
 	if (!fb_data)
