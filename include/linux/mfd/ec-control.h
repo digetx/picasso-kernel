@@ -20,6 +20,6 @@ int ec_write_word_data_locked(const struct ec_reg_data *reg_data, u16 value);
 int ec_write_word_data(const struct ec_reg_data *reg_data, u16 value);
 void ec_lock(void);
 void ec_unlock(void);
-u16 get_board_id(void);
+int get_board_id(void);
 
 #endif	/* __MFD_EC_CONTROL_H */

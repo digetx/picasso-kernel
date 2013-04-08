@@ -626,6 +626,8 @@ static void ec_lens_correction_preloading(struct work_struct *work)
 
 	lsc_from_ec_status = 1;
 }
+#else
+static void ec_lens_correction_preloading(struct work_struct *work) {}
 #endif
 
 static void ec_poweroff(void)
@@ -673,13 +675,21 @@ int is3Gwakeup(void)
 	return TEST_3G_WAKE_BIT(ret);
 }
 
-u16 get_board_id(void)
+int get_board_id(void)
 {
-	static u16 board_id = 0;
-	s32 ret = ec_read_word_data(BOARD_ID);
+	static int board_id = -EINVAL;
+	s32 ret;
 
-	if (ret >= 0)
-		board_id = ret;
+	if (!ec_chip) {
+		pr_warn("%s ec-contol not registered\n", __func__);
+		return board_id;
+	}
+
+	if (board_id < 0) {
+		ret = ec_read_word_data(BOARD_ID);
+		if (ret >= 0)
+			board_id = ret;
+	}
 
 	return board_id;
 }
@@ -698,6 +708,7 @@ static int ec_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
 	struct device_node *np = client->dev.of_node;
+	u32 lsc_work_delay = 0;
 	int ret;
 
 	ec_chip = devm_kzalloc(&client->dev, sizeof(*ec_chip), GFP_KERNEL);
@@ -715,6 +726,7 @@ static int ec_probe(struct i2c_client *client,
 	if (ret) {
 		dev_err(&client->dev, "%s: Failed to create sysfs group\n",
 			__func__);
+		ec_chip = NULL;
 		return ret;
 	}
 
@@ -724,6 +736,7 @@ static int ec_probe(struct i2c_client *client,
 		dev_err(&client->dev, "%s: Failed to create sysfs symlink\n",
 			__func__);
 		sysfs_remove_group(&client->dev.kobj, &ec_control_attr_group);
+		ec_chip = NULL;
 		return ret;
 	}
 
@@ -735,6 +748,7 @@ static int ec_probe(struct i2c_client *client,
 		dev_err(&client->dev, "%s: Failed to add devices\n", __func__);
 		sysfs_remove_link(NULL, "EcControl");
 		sysfs_remove_group(&client->dev.kobj, &ec_control_attr_group);
+		ec_chip = NULL;
 		return ret;
 	}
 
@@ -758,10 +772,15 @@ static int ec_probe(struct i2c_client *client,
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &ec_chip->panic_notifier);
 
-#ifdef CONFIG_LSC_FROM_EC
-	INIT_DELAYED_WORK(&ec_chip->lsc_work, ec_lens_correction_preloading);
-	schedule_delayed_work(&ec_chip->lsc_work, msecs_to_jiffies(10000));
-#endif
+	if (IS_ENABLED(CONFIG_LSC_FROM_EC)) {
+		INIT_DELAYED_WORK(&ec_chip->lsc_work,
+				  ec_lens_correction_preloading);
+
+		of_property_read_u32(np, "ec,lsc-start-delay", &lsc_work_delay);
+
+		schedule_delayed_work(&ec_chip->lsc_work,
+				      msecs_to_jiffies(lsc_work_delay));
+	}
 
 	dev_dbg(&client->dev, "device registered\n");
 
@@ -776,6 +795,7 @@ static int ec_remove(struct i2c_client *client)
 					 &ec_chip->panic_notifier);
 	sysfs_remove_link(NULL, "EcControl");
 	sysfs_remove_group(&client->dev.kobj, &ec_control_attr_group);
+	ec_chip = NULL;
 
 	return 0;
 }
