@@ -1632,7 +1632,6 @@ static int mxt_probe(struct i2c_client *client,
 	input_dev->dev.parent = &client->dev;
 	input_dev->open = mxt_input_open;
 	input_dev->close = mxt_input_close;
-	input_dev->hint_events_per_packet = 256U;
 
 	data->client = client;
 	data->input_dev = input_dev;
@@ -1648,9 +1647,6 @@ static int mxt_probe(struct i2c_client *client,
 	if (data->android) {
 		__set_bit(BTN_TOOL_FINGER, input_dev->keybit);
 		__set_bit(EV_SYN, input_dev->evbit);
-		__set_bit(ABS_MT_TOUCH_MAJOR, input_dev->absbit);
-		__set_bit(ABS_MT_POSITION_X, input_dev->absbit);
-		__set_bit(ABS_MT_POSITION_Y, input_dev->absbit);
 
 		data->report = mxt_input_report_android;
 
@@ -1665,9 +1661,6 @@ static int mxt_probe(struct i2c_client *client,
 				     0, data->max_y, 0, 0);
 	} else {
 		__set_bit(BTN_TOUCH, input_dev->keybit);
-		__set_bit(ABS_X, input_dev->absbit);
-		__set_bit(ABS_Y, input_dev->absbit);
-		__set_bit(ABS_PRESSURE, input_dev->absbit);
 
 		data->report = mxt_input_report_native;
 
