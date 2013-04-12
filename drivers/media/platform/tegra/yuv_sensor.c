@@ -448,37 +448,22 @@ static long sensor_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 static void sensor_power_on(struct sensor_info *info)
 {
-	if (gpio_is_valid(info->oe_gpio))
-		gpio_direction_output(info->oe_gpio, 0);
-
-	if (gpio_is_valid(info->rst_gpio))
-		gpio_direction_output(info->rst_gpio, 1);
-
+	gpio_direction_output(info->oe_gpio, 0);
+	gpio_direction_output(info->rst_gpio, 1);
 	msleep(1);
-
 	tegra_camera_gpio_set(1);
-
-	if (gpio_is_valid(info->rst_gpio))
-		gpio_direction_output(info->rst_gpio, 0);
-
 	msleep(1);
-
-	if (gpio_is_valid(info->rst_gpio))
-		gpio_direction_output(info->rst_gpio, 1);
+	gpio_direction_output(info->rst_gpio, 0);
+	msleep(1);
+	gpio_direction_output(info->rst_gpio, 1);
 }
 
 static void sensor_power_off(struct sensor_info *info)
 {
-	if (gpio_is_valid(info->oe_gpio))
-		gpio_direction_output(info->oe_gpio, 1);
-
+	gpio_direction_output(info->oe_gpio, 1);
 	tegra_camera_gpio_set(0);
-
-	if (gpio_is_valid(info->oe_gpio))
-		gpio_direction_output(info->oe_gpio, 0);
-
-	if (gpio_is_valid(info->rst_gpio))
-		gpio_direction_output(info->rst_gpio, 0);
+	gpio_direction_output(info->oe_gpio, 0);
+	gpio_direction_output(info->rst_gpio, 0);
 }
 
 static int sensor_open(struct inode *inode, struct file *file)
@@ -573,19 +558,23 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	if (gpio_is_valid(info->oe_gpio)) {
 		err = devm_gpio_request_one(&client->dev, info->oe_gpio,
 					    GPIOF_OUT_INIT_LOW, "yuv_oe");
-		if (err) {
-			dev_err(&client->dev, "cannot get oe gpio\n");
-			return err;
-		}
+	} else
+		err = -EINVAL;
+
+	if (err) {
+		dev_err(&client->dev, "cannot get oe gpio\n");
+		return err;
 	}
 
 	if (gpio_is_valid(info->rst_gpio)) {
 		err = devm_gpio_request_one(&client->dev, info->rst_gpio,
 					    GPIOF_OUT_INIT_HIGH, "yuv_rst");
-		if (err) {
-			dev_err(&client->dev, "cannot get rst gpio\n");
-			return err;
-		}
+	} else
+		err = -EINVAL;
+
+	if (err) {
+		dev_err(&client->dev, "cannot get rst gpio\n");
+		return err;
 	}
 
 	mutex_init(&yuv_lock);
