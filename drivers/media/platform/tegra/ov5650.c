@@ -1248,49 +1248,31 @@ static int ov5650_test_pattern(struct ov5650_info *info,
 
 static int ov5650_set_power(int val)
 {
+	struct ov5650_sensor *s = &stereo_ov5650_info->left;
+
 	pr_info("%s: val=%d camera mode=%d\n", __func__, val,
 			stereo_ov5650_info->camera_mode);
 
 	switch (stereo_ov5650_info->camera_mode) {
 	case Main:
 	case StereoCameraMode_Left:
-		if (stereo_ov5650_info->left.pdata) {
-			struct ov5650_sensor *s = &stereo_ov5650_info->left;
-
-			if (val) {
-				if (gpio_is_valid(s->pwdn_gpio))
-					gpio_direction_output(s->pwdn_gpio, 0);
-
-				if (gpio_is_valid(s->rst_gpio))
-					gpio_direction_output(s->rst_gpio, 0);
-
-				msleep(1);
-
-				tegra_camera_gpio_set(1);
-
-				if (gpio_is_valid(s->rst_gpio))
-					gpio_direction_output(s->rst_gpio, 0);
-
-				msleep(1);
-
-				if (gpio_is_valid(s->rst_gpio))
-					gpio_direction_output(s->rst_gpio, 1);
-
-				msleep(20);
-			} else {
-				if (gpio_is_valid(s->rst_gpio))
-					gpio_direction_output(s->rst_gpio, 0);
-
-				msleep(1);
-
-				if (gpio_is_valid(s->pwdn_gpio))
-					gpio_direction_output(s->pwdn_gpio, 1);
-
-				tegra_camera_gpio_set(0);
-
-				if (gpio_is_valid(s->pwdn_gpio))
-					gpio_direction_output(s->pwdn_gpio, 0);
-			}
+		if (val) {
+			gpio_direction_output(s->pwdn_gpio, 1);
+			gpio_direction_output(s->rst_gpio, 1);
+			msleep(1);
+			tegra_camera_gpio_set(1);
+			msleep(5);
+			gpio_direction_output(s->pwdn_gpio, 0);
+			msleep(20);
+			gpio_direction_output(s->rst_gpio, 0);
+			msleep(1);
+			gpio_direction_output(s->rst_gpio, 1);
+			msleep(20);
+		} else {
+			gpio_direction_output(s->pwdn_gpio, 1);
+			tegra_camera_gpio_set(0);
+			gpio_direction_output(s->rst_gpio, 0);
+			gpio_direction_output(s->pwdn_gpio, 0);
 		}
 		break;
 
@@ -1475,47 +1457,38 @@ static int left_ov5650_probe(struct i2c_client *client,
 		if (s->rst_gpio == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
 
-		if (gpio_is_valid(s->pwdn_gpio)) {
-			err = devm_gpio_request_one(&client->dev, s->pwdn_gpio,
-						    GPIOF_OUT_INIT_LOW, "ov5650_pwdn");
-			if (err) {
-				dev_err(&client->dev, "cannot get pwdn gpio\n");
-				return err;
-			}
+		err = devm_gpio_request_one(&client->dev, s->pwdn_gpio,
+					    GPIOF_OUT_INIT_LOW, "ov5650_pwdn");
+		if (err) {
+			dev_err(&client->dev, "cannot get pwdn gpio\n");
+			return err;
 		}
 
-		if (gpio_is_valid(s->rst_gpio)) {
-			err = devm_gpio_request_one(&client->dev, s->rst_gpio,
-						    GPIOF_OUT_INIT_HIGH, "ov5650_rst");
-			if (err) {
-				dev_err(&client->dev, "cannot get rst gpio\n");
-				return err;
-			}
+		err = devm_gpio_request_one(&client->dev, s->rst_gpio,
+					    GPIOF_OUT_INIT_HIGH, "ov5650_rst");
+		if (err) {
+			dev_err(&client->dev, "cannot get rst gpio\n");
+			return err;
 		}
 
 		stereo_ov5650_info->camera_mode = Main;
 		stereo_ov5650_info->left.pdata = client->dev.platform_data;
 		stereo_ov5650_info->left.i2c_client = client;
 
-		err = ov5650_set_power(1);
-		if (err)
-			return err;
-
 		tegra_camera_clk_enable();
+		ov5650_set_power(1);
+
 		do {
 			device_check_ret = ov5650_read_reg(client, 0x300A, &read_val);
 			if (device_check_ret == 0)
 				break;
 			retry++;
 		} while (retry < OV5650_MAX_RETRIES);
-		tegra_camera_clk_disable();
 		
 		pr_info("ov5650 chip_id: %d\n", read_val);
 
-		err = ov5650_set_power(0);
-		if (err)
-			return err;
-
+		ov5650_set_power(0);
+		tegra_camera_clk_disable();
 
 		if (device_check_ret != 0) {
 			pr_err("ov5650 cannot read chip_id\n");
