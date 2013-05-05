@@ -113,8 +113,6 @@ struct tegra_uart_port {
 
 	int			transfer_state;
 
-	struct work_struct	wakeup_work;
-
 	/* optional callback to exit low power mode */
 	void (*exit_lpm_cb)(struct uart_port *);
 	/* optional callback to indicate rx is done */
@@ -297,37 +295,6 @@ static void tegra_start_tx(struct uart_port *u)
 		tegra_start_pio_tx(t, count);
 }
 
-static void wakeup_work(struct work_struct *work)
-{
-	struct tegra_uart_port *t =
-			container_of(work, struct tegra_uart_port, wakeup_work);
-	struct uart_port *u = &t->uport;
-	unsigned long flags;
-
-	uart_write_wakeup(&t->uport);
-
-	spin_lock_irqsave(&u->lock, flags);
-
-	tegra_start_tx(u);
-
-	spin_unlock_irqrestore(&u->lock, flags);
-}
-
-static void tegra_handle_tx_pio(struct tegra_uart_port *t)
-{
-	struct uart_port *u = &t->uport;
-	struct circ_buf *xmit = &u->state->xmit;
-
-	fill_tx_fifo(t, t->tx_pio_bytes);
-
-	t->transfer_state &= ~TX_PIO;
-
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
-		schedule_work(&t->wakeup_work);
-
-	tegra_start_tx(u);
-}
-
 static void tegra_tx_dma_complete_callback(void *args)
 {
 	struct tegra_uart_port *t = args;
@@ -336,8 +303,6 @@ static void tegra_tx_dma_complete_callback(void *args)
 	struct dma_tx_state state;
 	u32 bytes_transferred;
 	unsigned long flags;
-
-	spin_lock_irqsave(&u->lock, flags);
 
 	dmaengine_tx_status(t->tx_dma_chan, t->tx_cookie, &state);
 	bytes_transferred = t->tx_dma_bytes - state.residue;
@@ -348,7 +313,9 @@ static void tegra_tx_dma_complete_callback(void *args)
 	t->transfer_state &= ~TX_DMA;
 
 	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
-		schedule_work(&t->wakeup_work);
+		uart_write_wakeup(&t->uport);
+
+	spin_lock_irqsave(&u->lock, flags);
 
 	tegra_start_tx(u);
 
@@ -525,6 +492,7 @@ static irqreturn_t tegra_uart_isr(int irq, void *data)
 {
 	struct tegra_uart_port *t = data;
 	struct uart_port *u = &t->uport;
+	struct circ_buf *xmit = &u->state->xmit;
 	unsigned long iir;
 	unsigned long ier;
 	unsigned long flags;
@@ -558,7 +526,18 @@ static irqreturn_t tegra_uart_isr(int irq, void *data)
 		case 1: /* Transmit interrupt only triggered when using PIO */
 			t->ier_shadow &= ~UART_IER_THRI;
 			tegra_uart_write(t, t->ier_shadow, UART_IER);
-			tegra_handle_tx_pio(t);
+
+			fill_tx_fifo(t, t->tx_pio_bytes);
+
+			t->transfer_state &= ~TX_PIO;
+
+			if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS) {
+				spin_unlock_irqrestore(&u->lock, flags);
+				uart_write_wakeup(&t->uport);
+				spin_lock_irqsave(&u->lock, flags);
+			}
+
+			tegra_start_tx(u);
 			break;
 
 		case 4: /* End of data */
@@ -924,6 +903,8 @@ static void tegra_shutdown(struct uart_port *u)
 	unsigned long mcr;
 	unsigned long flags;
 
+	spin_lock_irqsave(&u->lock, flags);
+
 	/* Disable interrupts */
 	tegra_uart_write(t, 0, UART_IER);
 
@@ -953,8 +934,6 @@ static void tegra_shutdown(struct uart_port *u)
 			lsr = tegra_uart_read(t, UART_LSR);
 		}
 	}
-
-	spin_lock_irqsave(&u->lock, flags);
 
 	/* Reset the Rx and Tx FIFOs */
 	tegra_fifo_reset(t, UART_FCR_CLEAR_XMIT | UART_FCR_CLEAR_RCVR);
@@ -1048,7 +1027,7 @@ static unsigned int tegra_tx_empty(struct uart_port *u)
 static void tegra_stop_tx(struct uart_port *u)
 {
 	struct tegra_uart_port *t = u->private_data;
-	struct circ_buf *xmit;
+	struct circ_buf *xmit = &u->state->xmit;
 	struct dma_tx_state state;
 	int count;
 
@@ -1057,7 +1036,6 @@ static void tegra_stop_tx(struct uart_port *u)
 		dmaengine_tx_status(t->tx_dma_chan, t->tx_cookie, &state);
 		count = t->tx_dma_bytes - state.residue;
 		async_tx_ack(t->tx_dma_desc);
-		xmit = &u->state->xmit;
 		xmit->tail = (xmit->tail + count) & (UART_XMIT_SIZE - 1);
 	}
 }
@@ -1300,8 +1278,6 @@ static int tegra_uart_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to get clock\n");
 		return PTR_ERR(t->clk);
 	}
-
-	INIT_WORK(&t->wakeup_work, wakeup_work);
 
 	ret = uart_add_one_port(&tegra_uart_drv, u);
 	if (ret < 0)
