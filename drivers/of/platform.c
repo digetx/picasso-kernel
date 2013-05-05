@@ -341,7 +341,7 @@ static const struct of_dev_auxdata *of_dev_lookup(const struct of_dev_auxdata *l
 /**
  * Assume that all child devices belongs to nvhost
  */
-static int of_nvhost_bus_create(struct device_node *bus,
+static int of_nvhost_bus_create(struct device_node *node,
 				const struct of_dev_auxdata *lookup)
 {
 	const struct of_dev_auxdata *auxdata;
@@ -350,18 +350,21 @@ static int of_nvhost_bus_create(struct device_node *bus,
 	void *platform_data = NULL;
 	int rc;
 
-	auxdata = of_dev_lookup(lookup, bus);
+	if (!of_device_is_available(node))
+		return -ENODEV;
+
+	auxdata = of_dev_lookup(lookup, node);
 	if (auxdata) {
 		bus_id = auxdata->name;
 		platform_data = auxdata->platform_data;
 	}
 
-	pr_debug("   nvhost create host: %s\n", bus->full_name);
-	rc = of_nvhost_device_create(bus, bus_id, platform_data);
+	pr_debug("   nvhost create host: %s\n", node->full_name);
+	rc = of_nvhost_device_create(node, bus_id, platform_data);
 	if (rc)
 		return rc;
 
-	for_each_child_of_node(bus, child) {
+	for_each_child_of_node(node, child) {
 		pr_debug("   nvhost create child: %s\n", child->full_name);
 		rc = of_nvhost_bus_create(child, lookup);
 		if (rc)
