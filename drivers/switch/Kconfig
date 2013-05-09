@@ -20,4 +20,8 @@ config PSENSOR
 	tristate "P-Sensor Switch support"
 	default n
 
+config SIMDETECT
+	tristate "SIM Hot-swap detection support"
+	default n
+
 endif # SWITCH

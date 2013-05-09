@@ -1101,6 +1101,11 @@
 		gpio = <&gpio 17 0>; /* gpio PC1 */
 	};
 
+	simdetect {
+		compatible = "a501,simdetect-switch";
+		gpio = <&gpio 71 0>; /* gpio PI7 */
+	};
+
 	memory-controller@7000f400 {
 		nvidia,use-ram-code;
 
