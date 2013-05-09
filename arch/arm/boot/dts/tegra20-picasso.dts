@@ -1096,6 +1096,11 @@
 		cpu-supply = <&cpu_vdd_reg>;
 	};
 
+	psensor {
+		compatible = "a501,psensor-switch";
+		gpio = <&gpio 17 0>; /* gpio PC1 */
+	};
+
 	memory-controller@7000f400 {
 		nvidia,use-ram-code;
 

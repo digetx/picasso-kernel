@@ -16,4 +16,8 @@ config ROTATELOCK
 	tristate "RotationLock Switch support"
 	default n
 
+config PSENSOR
+	tristate "P-Sensor Switch support"
+	default n
+
 endif # SWITCH
