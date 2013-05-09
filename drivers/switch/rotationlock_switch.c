@@ -68,18 +68,12 @@ static int rotlock_switch_probe(struct platform_device *pdev)
 	switch_data = devm_kzalloc(&pdev->dev, sizeof(*switch_data),
 				   GFP_KERNEL);
 	if (!switch_data){
-		dev_err(&pdev->dev, "Can't aloc switch data\n");
+		dev_err(&pdev->dev, "Can't alloc switch data\n");
 		return -ENOMEM;
 	}
 
 	switch_data->gpio = gpio;
 	switch_data->sdev.name = "rotationlock";
-
-	ret = switch_dev_register(&switch_data->sdev);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Can't register switch dev\n");
-		return ret;
-	}
 
 	INIT_DELAYED_WORK(&switch_data->work, rotlock_switch_work);
 
@@ -99,6 +93,12 @@ static int rotlock_switch_probe(struct platform_device *pdev)
 	if (of_property_read_u32(np, "debounce-interval",
 					&switch_data->debounce_interval))
 		switch_data->debounce_interval = 1;
+
+	ret = switch_dev_register(&switch_data->sdev);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Can't register switch dev\n");
+		return ret;
+	}
 
 #ifdef CONFIG_PM_EARLYSUSPEND
 	switch_data->suspend_handler.resume = rotlock_resume;
