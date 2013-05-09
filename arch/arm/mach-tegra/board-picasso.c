@@ -323,6 +323,35 @@ static struct notifier_block picasso_reboot_notifier = {
 	.priority = INT_MAX,
 };
 
+/******************************************************************************
+* Board type
+*****************************************************************************/
+static int get_pin_value(unsigned int gpio, char *name)
+{
+	int pin_value;
+
+	gpio_request(gpio, name);
+	gpio_direction_input(gpio);
+	pin_value = gpio_get_value(gpio);
+	gpio_free(gpio);
+
+	return pin_value;
+}
+
+int get_sku_id(void)
+{
+	static int g_sku_id = 0;
+
+	/* Wifi = 5, 3G = 3, DVT2 = 7 */
+	if (!g_sku_id)
+		g_sku_id = (get_pin_value(TEGRA_GPIO_PQ0, "PIN0") << 2) + \
+			   (get_pin_value(TEGRA_GPIO_PQ3, "PIN1") << 1) + \
+			    get_pin_value(TEGRA_GPIO_PQ6, "PIN2");
+
+	return g_sku_id;
+}
+EXPORT_SYMBOL(get_sku_id);
+
 static __initdata struct tegra_clk_init_table tegra_picasso_clk_init_table[] = {
 	{ "pwm",	"clk_m",	12000000,	false },
 	{ NULL,		NULL,		0,		0 },
