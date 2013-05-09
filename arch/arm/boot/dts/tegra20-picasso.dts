@@ -856,6 +856,12 @@
 		vusb-supply = <&avdd_usb_reg>;
 	};
 
+	usb@c5004000 {
+		status = "okay";
+		nvidia,phy-reset-gpio = <&gpio 169 1>; /* gpio PV1 */
+		vusb-supply = <&avdd_usb_reg>;
+	};
+
 	usb@c5008000 {
 		status = "okay";
 		nvidia,vbus-gpio = <&gpio 27 0>; /* gpio PD3 */
