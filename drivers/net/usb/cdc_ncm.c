@@ -1213,12 +1213,17 @@ static const struct driver_info wwan_noarp_info = {
 static const struct usb_device_id cdc_devs[] = {
 	/* Ericsson MBM devices like F5521gw */
 	{ .match_flags = USB_DEVICE_ID_MATCH_INT_INFO
-		| USB_DEVICE_ID_MATCH_VENDOR,
+		| USB_DEVICE_ID_MATCH_DEVICE,
 	  .idVendor = 0x0bdb,
+	  .idProduct = 0x190d,
 	  .bInterfaceClass = USB_CLASS_COMM,
 	  .bInterfaceSubClass = USB_CDC_SUBCLASS_NCM,
 	  .bInterfaceProtocol = USB_CDC_PROTO_NONE,
+#ifdef CONFIG_ANDROID
+	  .driver_info = (unsigned long) &cdc_mbm_info,
+#else
 	  .driver_info = (unsigned long) &wwan_info,
+#endif
 	},
 
 	/* Dell branded MBM devices like DW5550 */
@@ -1263,11 +1268,6 @@ static const struct usb_device_id cdc_devs[] = {
 	{ USB_INTERFACE_INFO(USB_CLASS_COMM,
 		USB_CDC_SUBCLASS_NCM, USB_CDC_PROTO_NONE),
 		.driver_info = (unsigned long)&cdc_ncm_info,
-	},
-
-	/* Ericsson f5521gw */
-	{ USB_DEVICE(0x0bdb, 0x190d),
-	  .driver_info = (unsigned long)&cdc_mbm_info,
 	},
 	{
 	},
