@@ -228,7 +228,7 @@ static void __init tegra_dt_init(void)
 	 * devices
 	 */
 	of_platform_populate(NULL, of_default_bus_match_table,
-				tegra20_auxdata_lookup, NULL);
+				tegra20_auxdata_lookup, &platform_bus);
 }
 
 static void __init tegra_dt_init_late(void)
