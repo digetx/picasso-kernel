@@ -522,8 +522,8 @@
 			#gpio-cells = <2>;
 
 			micdet-cfg = <0>;
-			micdet-delay = <100>;
-			gpio-cfg = <0xffffffff 0xffffffff 0 0xffffffff 0xffffffff>;
+			micdet-delay = <500>;
+			gpio-cfg = <0 0 0 0xffffffff 0xffffffff>;
 		};
 
 		al3000a@1c {
@@ -954,8 +954,8 @@
 			"Int Spk", "LINEOUTL",
 			"Int Spk", "LINEOUTR",
 			"Mic Jack", "MICBIAS",
-			"IN1L", "Mic Jack",
-			"IN1R", "Mic Jack",
+			"IN2L", "Mic Jack",
+			"IN2R", "Mic Jack",
 			"Int Mic", "MICBIAS",
 			"IN1L", "Int Mic",
 			"IN1R", "Int Mic";
