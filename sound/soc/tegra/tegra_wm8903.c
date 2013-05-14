@@ -313,6 +313,7 @@ static const struct snd_soc_dapm_route harmony_audio_map[] = {
 
 static const struct snd_kcontrol_new tegra_wm8903_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Int Spk"),
+	SOC_DAPM_PIN_SWITCH("Mic Jack"),
 };
 
 static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
