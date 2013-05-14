@@ -238,6 +238,7 @@ static const struct snd_soc_dapm_widget tegra_wm8903_dapm_widgets[] = {
 
 static const struct snd_kcontrol_new tegra_wm8903_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Int Spk"),
+	SOC_DAPM_PIN_SWITCH("Mic Jack"),
 };
 
 static int tegra_wm8903_jack_notifier(struct notifier_block *self,
