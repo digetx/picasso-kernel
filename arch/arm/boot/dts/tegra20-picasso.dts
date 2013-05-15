@@ -760,10 +760,11 @@
 					regulator-max-microvolt = <1300000>;
 				};
 
-				avdd_usb_reg: ldo3 {
+				ldo3 {
 					regulator-name = "vdd_ldo3,avdd_usb*";
 					regulator-min-microvolt = <3300000>;
 					regulator-max-microvolt = <3300000>;
+					regulator-always-on;
 				};
 
 				ldo4 {
@@ -846,20 +847,17 @@
 		reg = <0xc5000000 0x4000>;
 		interrupts = <0 20 0x04>;
 		nvidia,vbus-gpio = <&gpio 24 0>; /* gpio PD0 */
-		vusb-supply = <&avdd_usb_reg>;
 	};
 
 	usb-udc@c5000000 {
 		compatible = "nvidia,tegra20-udc";
 		reg = <0xc5000000 0x4000>;
 		interrupts = <0 20 0x04>;
-		vusb-supply = <&avdd_usb_reg>;
 	};
 
 	usb@c5008000 {
 		status = "okay";
 		nvidia,vbus-gpio = <&gpio 27 0>; /* gpio PD3 */
-		vusb-supply = <&avdd_usb_reg>;
 	};
 
 	ram-console {

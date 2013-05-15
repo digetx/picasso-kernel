@@ -16,7 +16,6 @@
 #define __TEGRA_USB_PHY_H
 
 #include <linux/clk.h>
-#include <linux/regulator/consumer.h>
 #include <linux/usb/otg.h>
 
 struct tegra_utmip_config {
@@ -61,8 +60,6 @@ struct tegra_usb_phy {
 	struct usb_phy *ulpi;
 	struct usb_phy u_phy;
 	struct device *dev;
-	struct regulator *vdd_reg;
-	bool vdd_reg_on;
 };
 
 struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
