@@ -742,19 +742,15 @@ static int tegra_usb_phy_power_on(struct tegra_usb_phy *phy)
 
 static int tegra_usb_phy_power_off(struct tegra_usb_phy *phy)
 {
-	int ret;
-
 	if (phy_is_ulpi(phy))
-		ret = ulpi_phy_power_off(phy);
+		return ulpi_phy_power_off(phy);
 	else
-		ret = utmi_phy_power_off(phy);
+		return utmi_phy_power_off(phy);
 
 	if (phy->vdd_reg && phy->vdd_reg_on) {
 		regulator_disable(phy->vdd_reg);
 		phy->vdd_reg_on = false;
 	}
-
-	return ret;
 }
 
 static int	tegra_usb_phy_suspend(struct usb_phy *x, int suspend)
