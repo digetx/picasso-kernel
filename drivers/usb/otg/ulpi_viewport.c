@@ -28,7 +28,7 @@
 
 static int ulpi_viewport_wait(void __iomem *view, u32 mask)
 {
-	unsigned long usec = 2000;
+	unsigned long usec = 7000;
 
 	while (usec--) {
 		if (!(readl(view) & mask))

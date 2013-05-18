@@ -31,6 +31,10 @@
 #undef DEBUG
 #undef VERBOSE_DEBUG
 
+#ifdef CONFIG_ANDROID
+#define USE_ERICSSON_WAKEUP_CMD 1
+#endif
+
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -54,11 +58,17 @@
 #define DRIVER_AUTHOR "Armin Fuerst, Pavel Machek, Johannes Erdfelt, Vojtech Pavlik, David Kubicek, Johan Hovold"
 #define DRIVER_DESC "USB Abstract Control Model driver for USB modems and ISDN adapters"
 
+#define IOC_MAGIC 'd'
+#define IOCTL_ENABLE_FD    _IO(IOC_MAGIC, 1)
+#define IOCTL_DISABLE_FD   _IO(IOC_MAGIC, 2)
+
 static struct usb_driver acm_driver;
 static struct tty_driver *acm_tty_driver;
 static struct acm *acm_table[ACM_TTY_MINORS];
 
 static DEFINE_MUTEX(acm_table_lock);
+
+static unsigned int enable_fd = 0;
 
 /*
  * acm_table accessors
@@ -841,6 +851,16 @@ static int acm_tty_ioctl(struct tty_struct *tty,
 	case TIOCSSERIAL:
 		rv = set_serial_info(acm, (struct serial_struct __user *) arg);
 		break;
+	case IOCTL_ENABLE_FD:
+		printk(KERN_DEBUG "ACM: Enable fastdormancy");
+		enable_fd = 1;
+		rv = 0;
+		break;
+	case IOCTL_DISABLE_FD:
+		printk(KERN_DEBUG "ACM: Disable fastdormancy");
+		enable_fd = 0;
+		rv = 0;
+		break;
 	}
 
 	return rv;
@@ -1441,7 +1461,15 @@ static int acm_suspend(struct usb_interface *intf, pm_message_t message)
 	struct acm *acm = usb_get_intfdata(intf);
 	int cnt;
 
-	if (PMSG_IS_AUTO(message)) {
+#ifdef USE_ERICSSON_WAKEUP_CMD
+	struct file *fp;
+	mm_segment_t fs;
+	char buffer[128] = {0};
+	int len = 0;
+	int timeout;
+#endif
+
+	if (message.event & PM_EVENT_AUTO) {
 		int b;
 
 		spin_lock_irq(&acm->write_lock);
@@ -1459,9 +1487,52 @@ static int acm_suspend(struct usb_interface *intf, pm_message_t message)
 
 	if (cnt)
 		return 0;
+	/*
+	we treat opened interfaces differently,
+	we must guard against open
+	*/
+	mutex_lock(&acm->mutex);
 
 	if (test_bit(ASYNCB_INITIALIZED, &acm->port.flags))
 		stop_data_traffic(acm);
+
+	mutex_unlock(&acm->mutex);
+
+#ifdef USE_ERICSSON_WAKEUP_CMD
+	if (acm->minor == 1 && message.event != PM_EVENT_AUTO_SUSPEND) {
+		printk(KERN_DEBUG "ttyACM send wakeset cmd\n");
+		fs = get_fs();
+		set_fs(KERNEL_DS);
+		fp = filp_open("/dev/ttyACM0", O_RDWR | O_NONBLOCK, 0);
+		if (fp) {
+send_wakeset_cmd:
+			if(enable_fd) {
+				printk(KERN_DEBUG "send AT*EFDORM;*EEWAKESET=1\n");
+				fp->f_op->write(fp, "AT*EFDORM;*EEWAKESET=1\r", 23, &fp->f_pos);
+			} else {
+				printk(KERN_DEBUG "send AT*EEWAKESET=1\n");
+				fp->f_op->write(fp, "AT*EEWAKESET=1\r", 15, &fp->f_pos);
+			}
+			for(timeout = 0; timeout < 10; timeout++) {
+				msleep(100);
+				len = fp->f_op->read(fp, buffer, 128, &fp->f_pos);
+				printk(KERN_DEBUG "ttyACM rsp len=%d timeout=%d\n", len, timeout);
+				if (len < 2) continue;
+				if(strstr( buffer, "*EMRDY") != NULL) {
+					printk(KERN_DEBUG "ttyACM get *EMRDY resend wakeset\n");
+					goto send_wakeset_cmd;
+				}
+				if(strstr( buffer, "OK") != NULL) {
+					printk(KERN_DEBUG "ttyACM set wakeset success\n");
+					break;
+				}
+			}
+			if(timeout == 10) printk(KERN_DEBUG "ACM%d wait rsp timeout\n", acm->minor);
+			filp_close(fp, NULL);
+		}
+		set_fs(fs);
+	}
+#endif
 
 	return 0;
 }

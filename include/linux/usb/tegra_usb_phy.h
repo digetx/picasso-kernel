@@ -63,6 +63,7 @@ struct tegra_usb_phy {
 	struct device *dev;
 	struct regulator *vdd_reg;
 	bool vdd_reg_on;
+	int initialized;
 };
 
 struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,

@@ -105,6 +105,8 @@ MODULE_PARM_DESC (ignore_oc, "ignore bogus hardware overcurrent indications");
 
 #define	INTR_MASK (STS_IAA | STS_FATAL | STS_PCD | STS_ERR | STS_INT)
 
+#define MAX_ERR_COUNT 256
+static int err_count = 0;
 /*-------------------------------------------------------------------------*/
 
 #include "ehci.h"
@@ -188,7 +190,7 @@ static int tdi_in_host_mode (struct ehci_hcd *ehci)
  */
 static int ehci_halt (struct ehci_hcd *ehci)
 {
-	u32	temp;
+	u32	temp = ehci_readl(ehci, &ehci->regs->status);
 
 	spin_lock_irq(&ehci->lock);
 
@@ -200,6 +202,10 @@ static int ehci_halt (struct ehci_hcd *ehci)
 		return 0;
 	}
 
+	if ((temp & STS_HALT) != 0) {
+		spin_unlock_irq(&ehci->lock);
+		return 0;
+	}
 	/*
 	 * This routine gets called during probe before ehci->command
 	 * has been initialized, so we can't rely on its value.
@@ -702,6 +708,19 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 	 * remain on, so mask it out along with the other status bits.
 	 */
 	masked_status = status & (INTR_MASK | STS_FLR);
+	if ((status & (STS_FLR | STS_INT)) == (STS_FLR | STS_INT)) {
+		if (STS_ERR & status)
+				err_count++;
+	 		else
+	 			err_count = 0;
+	 		}
+
+	 		if ((err_count > MAX_ERR_COUNT) && (STS_ERR & status)) {
+	 			ehci_dbg (ehci, "max error count reached\n");
+	 			ehci_writel(ehci, masked_status, &ehci->regs->status);
+	 			spin_unlock(&ehci->lock);
+	 			return IRQ_HANDLED;
+	 		}
 
 	/* Shared IRQ? */
 	if (!masked_status || unlikely(ehci->rh_state == EHCI_RH_HALTED)) {

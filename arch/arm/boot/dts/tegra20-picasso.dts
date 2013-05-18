@@ -859,6 +859,18 @@
 	usb@c5004000 {
 		status = "okay";
 		nvidia,phy-reset-gpio = <&gpio 169 1>; /* gpio PV1 */
+		nvidia,phy-ulpi-data0 = <&gpio 113 0>; /* gpio PO1 */
+		nvidia,phy-ulpi-data1 = <&gpio 114 0>; /* gpio PO2 */
+		nvidia,phy-ulpi-data2 = <&gpio 115 0>; /* gpio PO3 */
+		nvidia,phy-ulpi-data3 = <&gpio 116 0>; /* gpio PO4 */
+		nvidia,phy-ulpi-data4 = <&gpio 117 0>; /* gpio PO5 */
+		nvidia,phy-ulpi-data5 = <&gpio 118 0>; /* gpio PO6 */
+		nvidia,phy-ulpi-data6 = <&gpio 119 0>; /* gpio PO7 */
+		nvidia,phy-ulpi-data7 = <&gpio 112 0>; /* gpio PO0 */
+		nvidia,phy-ulpi-clk = <&gpio 192 0>; /* gpio PY1 */
+		nvidia,phy-ulpi-dir = <&gpio 193 0>; /* gpio PY2 */
+		nvidia,phy-ulpi-nxt = <&gpio 194 0>; /* gpio PY3 */
+		nvidia,phy-ulpi-stp = <&gpio 195 0>; /* gpio PY4 */
 		vusb-supply = <&avdd_usb_reg>;
 	};
 

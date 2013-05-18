@@ -33,7 +33,18 @@
 #define TEGRA_USB2_BASE			0xC5004000
 #define TEGRA_USB3_BASE			0xC5008000
 
+#define TEGRA_USB_USBMODE_REG_OFFSET		0x1a8
+
 #define TEGRA_USB_DMA_ALIGN 32
+
+#define STS_SRI	(1<<7)	/*	SOF Recieved	*/
+#define PORT_LS_SE0	(0 << 10)
+#define PORT_LS_K	(1 << 10)
+#define PORT_LS_J	(2 << 10)
+#define PORT_FS	(0 << 26)
+#define PORT_LS	(1 << 26)
+#define PORT_HS	(2 << 26)
+
 
 struct tegra_ehci_hcd {
 	struct ehci_hcd *ehci;
@@ -42,7 +53,9 @@ struct tegra_ehci_hcd {
 	struct clk *emc_clk;
 	struct usb_phy *transceiver;
 	int host_resumed;
+	int bus_suspended;
 	int port_resuming;
+	int power_down_on_bus_suspend;
 	enum tegra_usb_phy_port_speed port_speed;
 };
 
@@ -50,8 +63,10 @@ static void tegra_ehci_power_up(struct usb_hcd *hcd)
 {
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
 
+
 	clk_prepare_enable(tegra->emc_clk);
 	clk_prepare_enable(tegra->clk);
+
 	usb_phy_set_suspend(&tegra->phy->u_phy, 0);
 	tegra->host_resumed = 1;
 }
@@ -146,17 +161,44 @@ static int tegra_ehci_hub_control(
 	u32		temp;
 	unsigned long	flags;
 	int		retval = 0;
+	u32		usbcmd;
+	u32		usbsts_reg;
+
 
 	status_reg = &ehci->regs->port_status[(wIndex & 0xff) - 1];
 
 	spin_lock_irqsave(&ehci->lock, flags);
+	/*
+	 * In ehci_hub_control() for USB_PORT_FEAT_ENABLE clears the other bits
+	 * that are write on clear, by writing back the register read value, so
+	 * USB_PORT_FEAT_ENABLE is handled by masking the set on clear bits
+	 */
+	if (typeReq == ClearPortFeature && wValue == USB_PORT_FEAT_ENABLE) {
+		temp = ehci_readl(ehci, status_reg);
+		ehci_writel(ehci, (temp & ~PORT_RWC_BITS) & ~PORT_PE, status_reg);
+		goto done;
+	}
 
-	if (typeReq == GetPortStatus) {
+	else if (typeReq == GetPortStatus) {
 		temp = ehci_readl(ehci, status_reg);
 		if (tegra->port_resuming && !(temp & PORT_SUSPEND)) {
 			/* Resume completed, re-enable disconnect detection */
 			tegra->port_resuming = 0;
 			tegra_usb_phy_postresume(tegra->phy);
+			if (tegra->phy->instance == 1) {
+				if (((temp & (3 << 10)) == PORT_LS_J) && !(temp & PORT_PE)) {
+					pr_err("%s: sig = j, resume failed\n", __func__);
+
+					retval = -EPIPE;
+					goto done;
+				}
+				else if (((temp & (3 << 10)) == PORT_LS_J) && (temp & PORT_PE)) {
+					udelay(5);
+					temp = ehci_readl(ehci, status_reg);
+					dbg_port (ehci, "BusGetPortStatus", 0, temp);
+				}
+			}
+
 		}
 	}
 
@@ -175,10 +217,13 @@ static int tegra_ehci_hub_control(
 		 * If a transaction is in progress, there may be a delay in
 		 * suspending the port. Poll until the port is suspended.
 		 */
+
+		/* Need a 4ms delay before the controller goes to suspend*/
+		mdelay(4);
+
 		if (handshake(ehci, status_reg, PORT_SUSPEND,
 						PORT_SUSPEND, 5000))
 			pr_err("%s: timeout waiting for SUSPEND\n", __func__);
-
 		set_bit((wIndex & 0xff) - 1, &ehci->suspended_ports);
 		goto done;
 	}
@@ -208,14 +253,76 @@ static int tegra_ehci_hub_control(
 		if (!(temp & PORT_SUSPEND))
 			goto done;
 
+		if (temp & PORT_RESUME) {
+			usbcmd = ehci_readl(ehci, &ehci->regs->command);
+			usbcmd &= ~CMD_RUN;
+			ehci_writel(ehci, usbcmd, &ehci->regs->command);
+
+			/* detect remote wakeup */
+			ehci_dbg(ehci, "%s: usb-inst %d remote wakeup\n", __func__, tegra->phy->instance);
+			spin_unlock_irq(&ehci->lock);
+			msleep(20);
+			spin_lock_irq(&ehci->lock);
+
+			/* Poll until the controller clears RESUME and SUSPEND */
+			if (handshake(ehci, status_reg, PORT_RESUME, 0, 2000))
+				pr_err("%s: usb-inst %d timeout waiting for RESUME\n", __func__, tegra->phy->instance);
+			if (handshake(ehci, status_reg, PORT_SUSPEND, 0, 2000))
+				pr_err("%s: usb-inst %d timeout waiting for SUSPEND\n", __func__, tegra->phy->instance);
+
+			/* Since we skip remote wakeup event, put controller in suspend again and resume port later */
+			temp = ehci_readl(ehci, status_reg);
+			temp |= PORT_SUSPEND;
+			ehci_writel(ehci, temp, status_reg);
+			mdelay(4);
+			/* Wait until port suspend completes */
+			if (handshake(ehci, status_reg, PORT_SUSPEND,
+							 PORT_SUSPEND, 1000))
+				pr_err("%s: usb-inst %d timeout waiting for PORT_SUSPEND\n",
+								__func__, tegra->phy->instance);
+		}
+
+		tegra->port_resuming = 1;
+
 		/* Disable disconnect detection during port resume */
 		tegra_usb_phy_preresume(tegra->phy);
+
+		usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+		ehci_writel(ehci, usbsts_reg, &ehci->regs->status);
+		usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+
+		spin_unlock_irqrestore(&ehci->lock, flags);
+		msleep(20);
+		spin_lock_irqsave(&ehci->lock, flags);
+
+		if (handshake(ehci, &ehci->regs->status, STS_SRI, STS_SRI, 2000))
+			pr_err("%s: usb-inst %d timeout set for STS_SRI\n", __func__, tegra->phy->instance);
+
+		usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+		ehci_writel(ehci, usbsts_reg, &ehci->regs->status);
+
+		if (handshake(ehci, &ehci->regs->status, STS_SRI, 0, 2000))
+			pr_err("%s: usb-inst %d timeout clear STS_SRI\n", __func__, tegra->phy->instance);
+
+		if (handshake(ehci, &ehci->regs->status, STS_SRI, STS_SRI, 2000))
+			pr_err("%s: usb-inst %d timeout set STS_SRI\n", __func__, tegra->phy->instance);
+
+		spin_unlock_irqrestore(&ehci->lock, flags);
+		msleep(20);
+		spin_lock_irqsave(&ehci->lock, flags);
+
+
+
+		usbcmd = ehci_readl(ehci, &ehci->regs->command);
+		usbcmd |= CMD_RUN;
+		ehci_writel(ehci, usbcmd, &ehci->regs->command);
 
 		ehci->reset_done[wIndex-1] = jiffies + msecs_to_jiffies(25);
 
 		temp &= ~(PORT_RWC_BITS | PORT_WAKE_BITS);
 		/* start resume signalling */
 		ehci_writel(ehci, temp | PORT_RESUME, status_reg);
+
 		set_bit(wIndex-1, &ehci->resuming_ports);
 
 		spin_unlock_irqrestore(&ehci->lock, flags);
@@ -231,7 +338,6 @@ static int tegra_ehci_hub_control(
 		ehci->reset_done[wIndex-1] = 0;
 		clear_bit(wIndex-1, &ehci->resuming_ports);
 
-		tegra->port_resuming = 1;
 		goto done;
 	}
 
@@ -289,6 +395,393 @@ static int tegra_ehci_setup(struct usb_hcd *hcd)
 
 	return ehci_setup(hcd);
 }
+
+#ifdef CONFIG_PM
+static int tegra_bus_suspend (struct usb_hcd *hcd)
+{
+	struct ehci_hcd		*ehci = hcd_to_ehci (hcd);
+	int			port;
+	int			mask;
+	int			changed;
+
+	ehci_dbg(ehci, "suspend root hub\n");
+
+	if (time_before (jiffies, ehci->next_statechange))
+		msleep(5);
+	ehci_quiesce (ehci);
+
+	spin_lock_irq(&ehci->lock);
+	if (ehci->rh_state < EHCI_RH_RUNNING)
+		goto done;
+
+	/* Once the controller is stopped, port resumes that are already
+	 * in progress won't complete.  Hence if remote wakeup is enabled
+	 * for the root hub and any ports are in the middle of a resume or
+	 * remote wakeup, we must fail the suspend.
+	 */
+	if (hcd->self.root_hub->do_remote_wakeup) {
+		if (ehci->resuming_ports) {
+			spin_unlock_irq(&ehci->lock);
+			ehci_dbg(ehci, "suspend failed because a port is resuming\n");
+			return -EBUSY;
+		}
+	}
+
+
+	/* Unlike other USB host controller types, EHCI doesn't have
+	 * any notion of "global" or bus-wide suspend.  The driver has
+	 * to manually suspend all the active unsuspended ports, and
+	 * then manually resume them in the bus_resume() routine.
+	 */
+	ehci->bus_suspended = 0;
+	ehci->owned_ports = 0;
+	changed = 0;
+	port = HCS_N_PORTS(ehci->hcs_params);
+	while (port--) {
+		u32 __iomem	*reg = &ehci->regs->port_status [port];
+		u32		t1 = ehci_readl(ehci, reg) & ~PORT_RWC_BITS;
+		u32		t2 = t1 & ~PORT_WAKE_BITS;
+
+		/* keep track of which ports we suspend */
+		if (t1 & PORT_OWNER)
+			set_bit(port, &ehci->owned_ports);
+		else if ((t1 & PORT_PE) && !(t1 & PORT_SUSPEND)) {
+			t2 |= PORT_SUSPEND;
+			set_bit(port, &ehci->bus_suspended);
+		}
+
+		/* enable remote wakeup on all ports, if told to do so */
+		if (hcd->self.root_hub->do_remote_wakeup) {
+			/* only enable appropriate wake bits, otherwise the
+			 * hardware can not go phy low power mode. If a race
+			 * condition happens here(connection change during bits
+			 * set), the port change detection will finally fix it.
+			 */
+			if (t1 & PORT_CONNECT)
+				t2 |= PORT_WKOC_E | PORT_WKDISC_E;
+			else
+				t2 |= PORT_WKOC_E | PORT_WKCONN_E;
+		}
+
+		if (t1 != t2) {
+			ehci_vdbg (ehci, "port %d, %08x -> %08x\n",
+				port + 1, t1, t2);
+			ehci_writel(ehci, t2, reg);
+			changed = 1;
+		}
+	}
+
+	if (changed && ehci->has_hostpc) {
+		spin_unlock_irq(&ehci->lock);
+		msleep(5);	/* 5 ms for HCD to enter low-power mode */
+		spin_lock_irq(&ehci->lock);
+
+		port = HCS_N_PORTS(ehci->hcs_params);
+		while (port--) {
+			u32 __iomem	*hostpc_reg = &ehci->regs->hostpc[port];
+			u32		t3;
+
+			t3 = ehci_readl(ehci, hostpc_reg);
+			ehci_writel(ehci, t3 | HOSTPC_PHCD, hostpc_reg);
+			t3 = ehci_readl(ehci, hostpc_reg);
+			ehci_dbg(ehci, "Port %d phy low-power mode %s\n",
+					port, (t3 & HOSTPC_PHCD) ?
+					"succeeded" : "failed");
+		}
+	}
+
+	spin_unlock_irq(&ehci->lock);
+
+	/* Apparently some devices need a >= 1-uframe delay here */
+	if (ehci->bus_suspended)
+		udelay(150);
+
+	/* turn off now-idle HC */
+	ehci_halt (ehci);
+
+	spin_lock_irq(&ehci->lock);
+	if (ehci->enabled_hrtimer_events & BIT(EHCI_HRTIMER_POLL_DEAD))
+		ehci_handle_controller_death(ehci);
+	if (ehci->rh_state != EHCI_RH_RUNNING)
+		goto done;
+	ehci->rh_state = EHCI_RH_SUSPENDED;
+
+		end_unlink_async(ehci);
+		unlink_empty_async_suspended(ehci);
+		ehci_handle_intr_unlinks(ehci);
+		end_free_itds(ehci);
+
+	/* allow remote wakeup */
+	mask = INTR_MASK;
+	if (!hcd->self.root_hub->do_remote_wakeup)
+		mask &= ~STS_PCD;
+	ehci_writel(ehci, mask, &ehci->regs->intr_enable);
+	ehci_readl(ehci, &ehci->regs->intr_enable);
+
+done:
+	ehci->next_statechange = jiffies + msecs_to_jiffies(10);
+
+
+	/* ehci_work() may have re-enabled the watchdog timer, which we do not
+	 * want, and so we must delete any pending watchdog timer events.
+	 */
+
+	ehci->enabled_hrtimer_events = 0;
+	ehci->next_hrtimer_event = EHCI_HRTIMER_NO_EVENT;
+	spin_unlock_irq(&ehci->lock);
+
+	hrtimer_cancel(&ehci->hrtimer);
+
+	return 0;
+}
+
+/* caller has locked the root hub, and should reset/reinit on error */
+static int tegra_bus_resume (struct usb_hcd *hcd)
+{
+	struct ehci_hcd		*ehci = hcd_to_ehci (hcd);
+	struct			tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
+	u32			temp, usbsts_reg;
+	u32			power_okay;
+
+	u32 __iomem		*status_reg;
+	u32			usbcmd_bef_rsm, usbsts_bef_rsm, usbmode_bef_rsm, portsc_bef_rsm;
+	u32			usbcmd_in_rsm, usbsts_in_rsm, usbmode_in_rsm, portsc_in_rsm;
+
+	status_reg = &ehci->regs->port_status[0];
+
+	if (time_before (jiffies, ehci->next_statechange))
+		msleep(5);
+
+	spin_lock_irq (&ehci->lock);
+	if (!HCD_HW_ACCESSIBLE(hcd) || ehci->shutdown)
+			goto shutdown;
+
+	if (unlikely(ehci->debug)) {
+		if (!dbgp_reset_prep(hcd))
+			ehci->debug = NULL;
+		else
+			dbgp_external_startup(hcd);
+	}
+
+	/* Ideally and we've got a real resume here, and no port's power
+	 * was lost.  (For PCI, that means Vaux was maintained.)  But we
+	 * could instead be restoring a swsusp snapshot -- so that BIOS was
+	 * the last user of the controller, not reset/pm hardware keeping
+	 * state we gave to it.
+	 */
+	power_okay = ehci_readl(ehci, &ehci->regs->intr_enable);
+	ehci_dbg(ehci, "resume root hub%s\n",
+			power_okay ? "" : " after power loss");
+
+	/* at least some APM implementations will try to deliver
+	 * IRQs right away, so delay them until we're ready.
+	 */
+	ehci_writel(ehci, 0, &ehci->regs->intr_enable);
+
+	/* re-init operational registers */
+	ehci_writel(ehci, 0, &ehci->regs->segment);
+	ehci_writel(ehci, ehci->periodic_dma, &ehci->regs->frame_list);
+	ehci_writel(ehci, (u32) ehci->async->qh_dma, &ehci->regs->async_next);
+#if 0
+	/* restore CMD_RUN, framelist size, and irq threshold */
+	ehci_writel(ehci, ehci->command, &ehci->regs->command);
+#endif
+
+	/* wait for SOF edge before enable RUN bit*/
+	ehci_dbg(ehci, "%s:usb-inst %d USBSTS = 0x%x", __func__, tegra->phy->instance,
+	ehci_readl(ehci, &ehci->regs->status));
+	usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+	ehci_writel(ehci, usbsts_reg, &ehci->regs->status);
+	usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+	udelay(20);
+
+	if (handshake(ehci, &ehci->regs->status, STS_SRI, STS_SRI, 2000))
+		pr_err("%s: timeout set for STS_SRI\n", __func__);
+
+	usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+	ehci_writel(ehci, usbsts_reg, &ehci->regs->status);
+
+	if (handshake(ehci, &ehci->regs->status, STS_SRI, 0, 2000))
+		pr_err("%s: timeout clear STS_SRI\n", __func__);
+
+	if (handshake(ehci, &ehci->regs->status, STS_SRI, STS_SRI, 2000))
+		pr_err("%s: timeout set STS_SRI\n", __func__);
+
+	udelay(20);
+
+	usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+	if (usbsts_reg & STS_PCD)
+		ehci_dbg(ehci, "%s: usb-inst %d remote wakeup PCD\n", __func__, tegra->phy->instance);
+
+	/* resume suspended port */
+	temp = ehci_readl(ehci, status_reg);
+	if ((usbsts_reg & STS_PCD) ||
+		((temp & PORT_POWER) && (temp & PORT_PE) && (temp & PORT_RESUME))) {
+		/* detect remote wakeup */
+
+		ehci->command &= ~CMD_RUN;
+		ehci_writel(ehci, ehci->command, &ehci->regs->command);
+
+		ehci_dbg(ehci, "%s: usb-inst %d remote wakeup+\n", __func__, tegra->phy->instance);
+		dbg_port (ehci, "BusGetPortStatus", 0, temp);
+		spin_unlock_irq(&ehci->lock);
+		msleep(20);
+		spin_lock_irq(&ehci->lock);
+
+		/* Poll until the controller clears RESUME and SUSPEND */
+		if (handshake(ehci, status_reg, PORT_RESUME, 0, 2000))
+			pr_err("%s: usb-inst %d timeout waiting for RESUME\n", __func__, tegra->phy->instance);
+		if (handshake(ehci, status_reg, PORT_SUSPEND, 0, 2000))
+			pr_err("%s: usb-inst %d timeout waiting for SUSPEND\n", __func__, tegra->phy->instance);
+
+		temp = ehci_readl(ehci, status_reg);
+		dbg_port (ehci, "BusGetPortStatus", 0, temp);
+		ehci_dbg(ehci, "%s: usb-inst %d remote wakeup-\n", __func__, tegra->phy->instance);
+
+		/* wait for SOF edge before enable RUN bit*/
+		ehci_dbg(ehci, "%s:usb-inst %d USBSTS = 0x%x", __func__, tegra->phy->instance,
+		ehci_readl(ehci, &ehci->regs->status));
+		usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+		ehci_writel(ehci, usbsts_reg, &ehci->regs->status);
+		usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+		udelay(20);
+
+		if (handshake(ehci, &ehci->regs->status, STS_SRI, STS_SRI, 2000))
+			pr_err("%s: timeout set for STS_SRI\n", __func__);
+
+		usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+		ehci_writel(ehci, usbsts_reg, &ehci->regs->status);
+
+		if (handshake(ehci, &ehci->regs->status, STS_SRI, 0, 2000))
+			pr_err("%s: timeout clear STS_SRI\n", __func__);
+
+		if (handshake(ehci, &ehci->regs->status, STS_SRI, STS_SRI, 2000))
+			pr_err("%s: timeout set STS_SRI\n", __func__);
+
+		udelay(20);
+
+		ehci_dbg(ehci, "%s: usb-inst %d after remote wakeup resuming_ports = %lu\n",
+				__func__, tegra->phy->instance, ehci->resuming_ports);
+
+		clear_bit(0, &ehci->suspended_ports);
+
+		/* TRSMRCY = 10 msec */
+		spin_unlock_irq(&ehci->lock);
+		msleep(10);
+		spin_lock_irq(&ehci->lock);
+		temp = ehci_readl(ehci, status_reg);
+		dbg_port (ehci, "BusGetPortStatus", 0, temp);
+		ehci_dbg(ehci, "%s:USBSTS = 0x%x", __func__,
+		ehci_readl(ehci, &ehci->regs->status));
+
+
+	}
+
+	/* restore CMD_RUN, framelist size, and irq threshold */
+	ehci->command |= CMD_RUN;
+	ehci_writel(ehci, ehci->command, &ehci->regs->command);
+	ehci->rh_state = EHCI_RH_RUNNING;
+
+	// Read the USBCMD, USBSTS, USBMODE, PORTSC register here, don't print it at this time.
+	usbcmd_bef_rsm = ehci_readl(ehci, &ehci->regs->command);
+	usbsts_bef_rsm = ehci_readl(ehci, &ehci->regs->status);
+	usbmode_bef_rsm = readl(hcd->regs + TEGRA_USB_USBMODE_REG_OFFSET);
+	portsc_bef_rsm = ehci_readl(ehci, status_reg);
+
+	/* resume suspended port*/
+	temp = ehci_readl(ehci, status_reg);
+	if ((temp & PORT_POWER) && (temp & PORT_PE) && (temp & PORT_SUSPEND)) {
+		temp &= ~(PORT_RWC_BITS | PORT_WAKE_BITS);
+		temp |= PORT_RESUME;
+		ehci_writel(ehci, temp, status_reg);
+
+		// Read the USBCMD, USBSTS, USBMODE, PORTSC register here, don't print it at this time.
+		usbcmd_in_rsm = ehci_readl(ehci, &ehci->regs->command);
+		usbsts_in_rsm = ehci_readl(ehci, &ehci->regs->status);
+		usbmode_in_rsm = readl(hcd->regs + TEGRA_USB_USBMODE_REG_OFFSET);
+		portsc_in_rsm = ehci_readl(ehci, status_reg);
+
+		ehci_dbg(ehci, "%s:resume port+\n", __func__);
+		printk("%s: usb-inst %d reg before bus_resume USBCMD=%x, USBSTS=%x, USBMODE=%x, PORTSC=%x\n",
+		__func__, tegra->phy->instance, usbcmd_bef_rsm, usbsts_bef_rsm, usbmode_bef_rsm, portsc_bef_rsm);
+		printk("%s: usb-inst %d reg during bus_resume USBCMD=%x, USBSTS=%x, USBMODE=%x, PORTSC=%x\n",
+                           __func__, tegra->phy->instance, usbcmd_in_rsm, usbsts_in_rsm, usbmode_in_rsm, portsc_in_rsm);
+
+		spin_unlock_irq(&ehci->lock);
+		msleep(20);
+		spin_lock_irq(&ehci->lock);
+
+		temp = ehci_readl(ehci, status_reg);
+		dbg_port (ehci, "BusGetPortStatus", 0, temp);
+
+		if (ehci->shutdown)
+			goto shutdown;
+
+		/* Poll until the controller clears RESUME and SUSPEND */
+		if (handshake(ehci, status_reg, PORT_RESUME, 0, 2000))
+			pr_err("%s: timeout waiting for RESUME\n", __func__);
+		if (handshake(ehci, status_reg, PORT_SUSPEND, 0, 2000))
+			pr_err("%s: timeout waiting for SUSPEND\n", __func__);
+
+		clear_bit(0, &ehci->suspended_ports);
+
+		/* TRSMRCY = 10 msec */
+		spin_unlock_irq(&ehci->lock);
+		msleep(10);
+		spin_lock_irq(&ehci->lock);
+		temp = ehci_readl(ehci, status_reg);
+		dbg_port (ehci, "BusGetPortStatus", 0, temp);
+		ehci_dbg(ehci, "%s:USBSTS = 0x%x", __func__,
+		ehci_readl(ehci, &ehci->regs->status));
+		ehci_dbg(ehci, "%s:resume port-\n", __func__);
+	}
+
+	(void) ehci_readl(ehci, &ehci->regs->command);
+
+	temp = ehci_readl(ehci, status_reg);
+	dbg_port (ehci, "BusGetPortStatus", 0, temp);
+	if (((temp & (3 << 10)) == PORT_LS_J) && !(temp & PORT_PE)) {
+		ehci_dbg(ehci, "%s: failed to resume port. let usb_port_resume to resume port later\n", __func__);
+		temp = ehci_readl(ehci, status_reg);
+		temp |= PORT_SUSPEND;
+		ehci_writel(ehci, temp, status_reg);
+		mdelay(4);
+		/* Wait until port suspend completes */
+		if (handshake(ehci, status_reg, PORT_SUSPEND,
+							 PORT_SUSPEND, 1000))
+			pr_err("%s: timeout waiting for PORT_SUSPEND\n",
+								__func__);
+		set_bit(0, &ehci->suspended_ports);
+		temp = ehci_readl(ehci, status_reg);
+		dbg_port (ehci, "BusGetPortStatus", 0, temp);
+	} else if (((temp & (3 << 10)) == PORT_LS_J) && (temp & PORT_PE)) {
+		udelay(5);
+		temp = ehci_readl(ehci, status_reg);
+		dbg_port (ehci, "BusGetPortStatus", 0, temp);
+	}
+
+	ehci->next_statechange = jiffies + msecs_to_jiffies(5);
+	spin_unlock_irq(&ehci->lock);
+
+	ehci_handover_companion_ports(ehci);
+
+	/* Now we can safely re-enable irqs */
+	spin_lock_irq(&ehci->lock);
+	if (ehci->shutdown)
+		goto shutdown;
+
+	/* Now we can safely re-enable irqs */
+	ehci_writel(ehci, INTR_MASK, &ehci->regs->intr_enable);
+	(void) ehci_readl(ehci, &ehci->regs->intr_enable);
+	spin_unlock_irq (&ehci->lock);
+
+	return 0;
+
+shutdown:
+	spin_unlock_irq(&ehci->lock);
+	return -ESHUTDOWN;
+}
+#endif
 
 struct dma_aligned_buffer {
 	void *kmalloc_ptr;
@@ -368,66 +861,6 @@ static void tegra_ehci_unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
 	usb_hcd_unmap_urb_for_dma(hcd, urb);
 	free_dma_aligned_buffer(urb);
 }
-
-static const struct hc_driver tegra_ehci_hc_driver = {
-	.description		= hcd_name,
-	.product_desc		= "Tegra EHCI Host Controller",
-	.hcd_priv_size		= sizeof(struct ehci_hcd),
-	.flags			= HCD_USB2 | HCD_MEMORY,
-
-	/* standard ehci functions */
-	.irq			= ehci_irq,
-	.start			= ehci_run,
-	.stop			= ehci_stop,
-	.urb_enqueue		= ehci_urb_enqueue,
-	.urb_dequeue		= ehci_urb_dequeue,
-	.endpoint_disable	= ehci_endpoint_disable,
-	.endpoint_reset		= ehci_endpoint_reset,
-	.get_frame_number	= ehci_get_frame,
-	.hub_status_data	= ehci_hub_status_data,
-	.clear_tt_buffer_complete = ehci_clear_tt_buffer_complete,
-	.relinquish_port	= ehci_relinquish_port,
-	.port_handed_over	= ehci_port_handed_over,
-
-	/* modified ehci functions for tegra */
-	.reset			= tegra_ehci_setup,
-	.shutdown		= tegra_ehci_shutdown,
-	.map_urb_for_dma	= tegra_ehci_map_urb_for_dma,
-	.unmap_urb_for_dma	= tegra_ehci_unmap_urb_for_dma,
-	.hub_control		= tegra_ehci_hub_control,
-#ifdef CONFIG_PM
-	.bus_suspend		= ehci_bus_suspend,
-	.bus_resume		= ehci_bus_resume,
-#endif
-};
-
-static int setup_vbus_gpio(struct platform_device *pdev,
-			   struct tegra_ehci_platform_data *pdata)
-{
-	int err = 0;
-	int gpio;
-
-	gpio = pdata->vbus_gpio;
-	if (!gpio_is_valid(gpio))
-		gpio = of_get_named_gpio(pdev->dev.of_node,
-					 "nvidia,vbus-gpio", 0);
-	if (!gpio_is_valid(gpio))
-		return 0;
-
-	err = gpio_request(gpio, "vbus_gpio");
-	if (err) {
-		dev_err(&pdev->dev, "can't request vbus gpio %d", gpio);
-		return err;
-	}
-	err = gpio_direction_output(gpio, 1);
-	if (err) {
-		dev_err(&pdev->dev, "can't enable vbus\n");
-		return err;
-	}
-
-	return err;
-}
-
 #ifdef CONFIG_PM
 
 static int controller_suspend(struct device *dev)
@@ -437,19 +870,52 @@ static int controller_suspend(struct device *dev)
 	struct ehci_hcd	*ehci = tegra->ehci;
 	struct usb_hcd *hcd = ehci_to_hcd(ehci);
 	struct ehci_regs __iomem *hw = ehci->regs;
+	u32				temp, usbsts_reg;
 	unsigned long flags;
 
-	if (time_before(jiffies, ehci->next_statechange))
-		msleep(10);
+	if (ehci->bus_suspended)
+             return 0;
+	if (hcd->self.root_hub->do_remote_wakeup) {
+		if (ehci->resuming_ports) {
+			ehci_dbg(ehci, "power down failed because a port is resuming\n");
+			return -EBUSY;
+		}
+	}
+
+	ehci_dbg(ehci, "%s:usb-inst %d USBSTS = 0x%x", __func__, tegra->phy->instance,
+	ehci_readl(ehci, &ehci->regs->status));
+
+	dbg_port (ehci, "BusGetPortStatus", 0, ehci_readl(ehci, &hw->port_status[0]));
 
 	ehci_halt(ehci);
 
 	spin_lock_irqsave(&ehci->lock, flags);
 	tegra->port_speed = (readl(&hw->port_status[0]) >> 26) & 0x3;
+
 	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
 	spin_unlock_irqrestore(&ehci->lock, flags);
 
+	ehci_dbg(ehci, "%s:usb-inst %d USBSTS = 0x%x", __func__, tegra->phy->instance,
+	ehci_readl(ehci, &ehci->regs->status));
+	dbg_port (ehci, "BusGetPortStatus", 0, ehci_readl(ehci, &hw->port_status[0]));
+
+	if (hcd->self.root_hub->do_remote_wakeup) {
+
+		usbsts_reg = ehci_readl(ehci, &ehci->regs->status);
+		if (usbsts_reg & STS_PCD)
+			ehci_dbg(ehci, "%s: usb-inst %d remote wakeup PCD\n", __func__, tegra->phy->instance);
+
+
+		temp = ehci_readl(ehci, &hw->port_status[0]);
+		if ( temp & PORT_RESUME ) {
+			set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+			ehci_dbg(ehci, "power down failed because a port is resuming (resume not set)\n");
+			return -EBUSY;
+		}
+	}
+
 	tegra_ehci_power_down(hcd);
+
 	return 0;
 }
 
@@ -533,7 +999,7 @@ static int controller_resume(struct device *dev)
 
 		/* Wait until port suspend completes */
 		if (handshake(ehci, &hw->port_status[0], PORT_SUSPEND,
-							 PORT_SUSPEND, 1000)) {
+							 PORT_SUSPEND, 5000)) {
 			pr_err("%s: timeout waiting for PORT_SUSPEND\n",
 								__func__);
 			goto restart;
@@ -544,6 +1010,7 @@ static int controller_resume(struct device *dev)
 	goto done;
 
  restart:
+
 	if (tegra->port_speed <= TEGRA_USB_PHY_PORT_SPEED_HIGH)
 		tegra_ehci_phy_restore_end(tegra->phy);
 
@@ -562,6 +1029,14 @@ static int tegra_ehci_suspend(struct device *dev)
 	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
 	int rc = 0;
 
+
+	if ((tegra->bus_suspended) && (tegra->power_down_on_bus_suspend)) {
+		return 0;
+	}
+	if (time_before(jiffies, tegra->ehci->next_statechange))
+		msleep(10);
+
+
 	/*
 	 * When system sleep is supported and USB controller wakeup is
 	 * implemented: If the controller is runtime-suspended and the
@@ -574,34 +1049,66 @@ static int tegra_ehci_suspend(struct device *dev)
 
 static int tegra_ehci_resume(struct device *dev)
 {
+	struct tegra_ehci_hcd *tegra =
+			platform_get_drvdata(to_platform_device(dev));
 	int rc;
 
-	rc = controller_resume(dev);
-	if (rc == 0) {
-		pm_runtime_disable(dev);
-		pm_runtime_set_active(dev);
-		pm_runtime_enable(dev);
+	if ((tegra->bus_suspended) && (tegra->power_down_on_bus_suspend)) {
+		return 0;
 	}
+
+		rc = controller_resume(dev);
+		if (rc == 0) {
+			pm_runtime_disable(dev);
+			pm_runtime_set_active(dev);
+			pm_runtime_enable(dev);
+		}
+
 	return rc;
 }
 
 static int tegra_ehci_runtime_suspend(struct device *dev)
 {
+	int rc = 0;
 	struct tegra_ehci_hcd *tegra =
 			platform_get_drvdata(to_platform_device(dev));
+	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
 
-	clk_disable_unprepare(tegra->emc_clk);
+/* FIXME: Don't work correctly. Need sync with system suspend */
 
-	return 0;
+	if ((tegra->bus_suspended) && (tegra->power_down_on_bus_suspend)) {
+		return 0;
+	}
+
+	if (time_before(jiffies, tegra->ehci->next_statechange))
+		msleep(10);
+
+
+	if (HCD_HW_ACCESSIBLE(hcd))
+		rc = controller_suspend(dev);
+
+	return rc;
 }
 
 static int tegra_ehci_runtime_resume(struct device *dev)
 {
 	struct tegra_ehci_hcd *tegra =
 			platform_get_drvdata(to_platform_device(dev));
+	int rc;
 
-	return clk_prepare_enable(tegra->emc_clk);
+	/* FIXME: Don't work correctly. Need sync with system suspend */
+
+	if ((tegra->bus_suspended) && (tegra->power_down_on_bus_suspend)) {
+		return 0;
+	}
+
+	rc = controller_suspend(dev);
+
+	return rc;
 }
+
+
+
 
 static const struct dev_pm_ops tegra_ehci_pm_ops = {
 	.suspend	= tegra_ehci_suspend,
@@ -611,6 +1118,106 @@ static const struct dev_pm_ops tegra_ehci_pm_ops = {
 };
 
 #endif
+
+#ifdef CONFIG_PM
+static int tegra_ehci_bus_suspend(struct usb_hcd *hcd)
+{
+	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
+	int error_status = 0;
+
+	if (!tegra->host_resumed)
+		tegra_ehci_power_up(hcd);
+
+	error_status = tegra_bus_suspend(hcd);
+	if (!(error_status) && tegra->power_down_on_bus_suspend) {
+		error_status = controller_suspend(hcd->self.controller);
+		if (!error_status)
+			tegra->bus_suspended = 1;
+		else
+			tegra_bus_resume(hcd);
+	}
+	return error_status;
+}
+
+static int tegra_ehci_bus_resume(struct usb_hcd *hcd)
+{
+	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
+	int rc;
+
+	if (tegra->bus_suspended && tegra->power_down_on_bus_suspend) {
+		rc = controller_resume(hcd->self.controller);
+		tegra->bus_suspended = 0;
+
+		if (rc == 0) {
+			pm_runtime_disable(hcd->self.controller);
+			pm_runtime_set_active(hcd->self.controller);
+			pm_runtime_enable(hcd->self.controller);
+		}
+	}
+
+	return tegra_bus_resume(hcd);
+}
+#endif
+
+static const struct hc_driver tegra_ehci_hc_driver = {
+	.description		= hcd_name,
+	.product_desc		= "Tegra EHCI Host Controller",
+	.hcd_priv_size		= sizeof(struct ehci_hcd),
+	.flags			= HCD_USB2 | HCD_MEMORY,
+
+	/* standard ehci functions */
+	.irq			= ehci_irq,
+	.start			= ehci_run,
+	.stop			= ehci_stop,
+	.urb_enqueue		= ehci_urb_enqueue,
+	.urb_dequeue		= ehci_urb_dequeue,
+	.endpoint_disable	= ehci_endpoint_disable,
+	.endpoint_reset		= ehci_endpoint_reset,
+	.get_frame_number	= ehci_get_frame,
+	.hub_status_data	= ehci_hub_status_data,
+	.clear_tt_buffer_complete = ehci_clear_tt_buffer_complete,
+	.relinquish_port	= ehci_relinquish_port,
+	.port_handed_over	= ehci_port_handed_over,
+
+	/* modified ehci functions for tegra */
+	.reset			= tegra_ehci_setup,
+	.shutdown		= tegra_ehci_shutdown,
+	.map_urb_for_dma	= tegra_ehci_map_urb_for_dma,
+	.unmap_urb_for_dma	= tegra_ehci_unmap_urb_for_dma,
+	.hub_control		= tegra_ehci_hub_control,
+#ifdef CONFIG_PM
+	.bus_suspend		= tegra_ehci_bus_suspend,
+	.bus_resume		= tegra_ehci_bus_resume,
+#endif
+};
+
+static int setup_vbus_gpio(struct platform_device *pdev,
+			   struct tegra_ehci_platform_data *pdata)
+{
+	int err = 0;
+	int gpio;
+
+	gpio = pdata->vbus_gpio;
+	if (!gpio_is_valid(gpio))
+		gpio = of_get_named_gpio(pdev->dev.of_node,
+					 "nvidia,vbus-gpio", 0);
+	if (!gpio_is_valid(gpio))
+		return 0;
+
+	err = gpio_request(gpio, "vbus_gpio");
+	if (err) {
+		dev_err(&pdev->dev, "can't request vbus gpio %d", gpio);
+		return err;
+	}
+	err = gpio_direction_output(gpio, 1);
+	if (err) {
+		dev_err(&pdev->dev, "can't enable vbus\n");
+		return err;
+	}
+
+	return err;
+}
+
 
 static u64 tegra_ehci_dma_mask = DMA_BIT_MASK(32);
 
@@ -730,6 +1337,7 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 
 	tegra->host_resumed = 1;
 	tegra->ehci = hcd_to_ehci(hcd);
+	tegra->power_down_on_bus_suspend = pdata->power_down_on_bus_suspend;
 
 	irq = platform_get_irq(pdev, 0);
 	if (!irq) {
@@ -757,7 +1365,7 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 	pm_runtime_get_noresume(&pdev->dev);
 
 	/* Don't skip the pm_runtime_forbid call if wakeup isn't working */
-	if (!pdata->power_down_on_bus_suspend)
+//	if (!pdata->power_down_on_bus_suspend)
 		pm_runtime_forbid(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);

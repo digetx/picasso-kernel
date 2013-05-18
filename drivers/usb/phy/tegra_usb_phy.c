@@ -36,7 +36,13 @@
 #define TEGRA_AHB_GIZMO_BASE	0x6000C004
 #define TEGRA_AHB_GIZMO_SIZE	0x10C
 
+#define USB_TXFILLTUNING        0x164
+
 #define ULPI_VIEWPORT		0x170
+
+#define   ULPI_WAKEUP          (1 << 31)
+#define   ULPI_RUN             (1 << 30)
+#define   ULPI_RD_WR           (1 << 29)
 
 #define USB_PORTSC1		0x184
 #define   USB_PORTSC1_PTS(x)	(((x) & 0x3) << 30)
@@ -55,6 +61,7 @@
 #define   USB_WAKE_ON_CNNT_EN_DEV	(1 << 3)
 #define   USB_WAKE_ON_DISCON_EN_DEV	(1 << 4)
 #define   USB_SUSP_CLR		(1 << 5)
+#define   USB_CLKEN		(1 << 6)
 #define   USB_PHY_CLK_VALID	(1 << 7)
 #define   UTMIP_RESET			(1 << 11)
 #define   UHSIC_RESET			(1 << 11)
@@ -303,7 +310,7 @@ static int utmip_pad_power_off(struct tegra_usb_phy *phy)
 
 static int utmi_wait_register(void __iomem *reg, u32 mask, u32 result)
 {
-	unsigned long timeout = 2000;
+	unsigned long timeout = 5000;
 	do {
 		if ((readl(reg) & mask) == result)
 			return 0;
@@ -581,71 +588,369 @@ static void utmi_phy_restore_end(struct tegra_usb_phy *phy)
 	udelay(10);
 }
 
+/*
+static void dump_ulpi_phy_regsiter(struct tegra_usb_phy *phy)
+{
+	int i;
+	printk("+%s\n", __func__);
+	for (i = 0; i < 60; i++){
+		printk("reg(0x%x)=0x%x\n", i, usb_phy_io_read(phy->ulpi, i));
+	}
+	printk("-%s\n", __func__);
+}
+*/
+
+static void ulpi_phy_restore_start(struct tegra_usb_phy *phy,
+                                  enum tegra_usb_phy_port_speed port_speed)
+{
+       unsigned long val;
+       void __iomem *base = phy->regs;
+       int gpio;
+
+	   gpio = of_get_named_gpio(phy->dev->of_node,
+				  "nvidia,phy-ulpi-nxt", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-nxt: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_nxt");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-dir", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-dir: %d\n", __func__,
+			       gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_dir");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data7", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data7: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data7");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data6", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data6: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data6");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-data5", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data5: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data5");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-data4", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data4: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data4");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-data3", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data3: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data3");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-data2", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data2: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data2");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-data1", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data1: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data1");
+    	   gpio_direction_input(gpio);
+       }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-data0", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data0: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_data0");
+    	   gpio_direction_input(gpio);
+       }
+
+       /* Drive ULPI_STP to 0 */
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-stp", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-stp: %d\n", __func__,
+    			   gpio);
+       }
+       else {
+    	   gpio_request(gpio, "ulpi_stp");
+    	   gpio_direction_output(gpio, 0);
+       }
+       udelay(2);
+
+
+       val = readl(base + ULPI_TIMING_CTRL_0);
+       val &= ~ULPI_OUTPUT_PINMUX_BYP;
+       writel(val, base + ULPI_TIMING_CTRL_0);
+}
+
+static void ulpi_phy_restore_end(struct tegra_usb_phy *phy)
+{
+       unsigned long val;
+       void __iomem *base = phy->regs;
+       int gpio;
+
+       val = readl(base + ULPI_TIMING_CTRL_0);
+       val |= ULPI_OUTPUT_PINMUX_BYP;
+       writel(val, base + ULPI_TIMING_CTRL_0);
+
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-nxt", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-nxt: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-dir", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-dir: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+	   gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data7", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data7: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		  gpio_free(gpio);
+	   }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data6", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data6: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data5", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data5: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data4", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data4: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+    		   "nvidia,phy-ulpi-data3", 0);
+	   if (!gpio_is_valid(gpio)) {
+		   pr_err("%s: invalid phy-ulpi-data3: %d\n", __func__,
+				   gpio);
+	   }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+	   gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data2", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data2: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data1", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data1: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-data0", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-data0: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       /* Clear Drive ULPI_STP to 0 as GPIO */
+       udelay(2);
+       gpio =	of_get_named_gpio(phy->dev->of_node,
+					  "nvidia,phy-ulpi-stp", 0);
+       if (!gpio_is_valid(gpio)) {
+    	   pr_err("%s: invalid phy-ulpi-stp: %d\n", __func__,
+    			   gpio);
+       }
+	   else {
+		   gpio_free(gpio);
+	   }
+
+       udelay(10);
+       if (usb_phy_io_write(phy->ulpi, 0x55, 0x04))
+    	   pr_err("%s: ulpi write failed\n", __func__);
+
+}
+
 static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 {
-	int ret;
 	unsigned long val;
 	void __iomem *base = phy->regs;
 	struct tegra_ulpi_config *config = phy->config;
-
-	gpio_direction_output(config->reset_gpio, 0);
-	msleep(5);
-	gpio_direction_output(config->reset_gpio, 1);
+	int ret;
 
 	clk_prepare_enable(phy->clk);
 	msleep(1);
 
-	val = readl(base + USB_SUSP_CTRL);
-	val |= UHSIC_RESET;
-	writel(val, base + USB_SUSP_CTRL);
-
-	val = readl(base + ULPI_TIMING_CTRL_0);
-	val |= ULPI_OUTPUT_PINMUX_BYP | ULPI_CLKOUT_PINMUX_BYP;
-	writel(val, base + ULPI_TIMING_CTRL_0);
-
-	val = readl(base + USB_SUSP_CTRL);
-	val |= ULPI_PHY_ENABLE;
-	writel(val, base + USB_SUSP_CTRL);
-
-	val = 0;
-	writel(val, base + ULPI_TIMING_CTRL_1);
-
-	val |= ULPI_DATA_TRIMMER_SEL(4);
-	val |= ULPI_STPDIRNXT_TRIMMER_SEL(4);
-	val |= ULPI_DIR_TRIMMER_SEL(4);
-	writel(val, base + ULPI_TIMING_CTRL_1);
-	udelay(10);
-
-	val |= ULPI_DATA_TRIMMER_LOAD;
-	val |= ULPI_STPDIRNXT_TRIMMER_LOAD;
-	val |= ULPI_DIR_TRIMMER_LOAD;
-	writel(val, base + ULPI_TIMING_CTRL_1);
-
-	/* Fix VbusInvalid due to floating VBUS */
-	ret = usb_phy_io_write(phy->ulpi, 0x40, 0x08);
-	if (ret) {
-		pr_err("%s: ulpi write failed\n", __func__);
-		return ret;
+	if (!phy->initialized) {
+		gpio_direction_output(config->reset_gpio, 0);
+		msleep(5);
+		gpio_direction_output(config->reset_gpio, 1);
 	}
 
-	ret = usb_phy_io_write(phy->ulpi, 0x80, 0x0B);
-	if (ret) {
-		pr_err("%s: ulpi write failed\n", __func__);
-		return ret;
+	val = readl(base + USB_SUSP_CTRL);
+	if (!(val & UHSIC_RESET)) {
+		/* resume from LP0 */
+		val |= UHSIC_RESET;
+		writel(val, base + USB_SUSP_CTRL);
+
+		val = 0;
+		writel(val, base + ULPI_TIMING_CTRL_1);
+
+		val |= ULPI_DATA_TRIMMER_SEL(4);
+		val |= ULPI_STPDIRNXT_TRIMMER_SEL(4);
+		val |= ULPI_DIR_TRIMMER_SEL(4);
+		writel(val, base + ULPI_TIMING_CTRL_1);
+		udelay(10);
+
+		val |= ULPI_DATA_TRIMMER_LOAD;
+		val |= ULPI_STPDIRNXT_TRIMMER_LOAD;
+		val |= ULPI_DIR_TRIMMER_LOAD;
+		writel(val, base + ULPI_TIMING_CTRL_1);
+
+		val = readl(base + ULPI_TIMING_CTRL_0);
+		val |= ULPI_OUTPUT_PINMUX_BYP | ULPI_CLKOUT_PINMUX_BYP;
+		writel(val, base + ULPI_TIMING_CTRL_0);
+
+		val = readl(base + USB_SUSP_CTRL);
+		val |= ULPI_PHY_ENABLE;
+		writel(val, base + USB_SUSP_CTRL);
+
+		if (utmi_wait_register(base + USB_SUSP_CTRL, USB_PHY_CLK_VALID,
+						     USB_PHY_CLK_VALID) < 0)
+		pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
+
+		val = readl(base + USB_TXFILLTUNING);
+		if ((val & 0x00ff0000) != 0x00100000) {
+		    val = 0x00100000;
+		    writel(val, base + USB_TXFILLTUNING);
+		}
+        if (utmi_wait_register(base + USB_SUSP_CTRL, USB_CLKEN, USB_CLKEN) < 0)
+                pr_err("%s: timeout waiting for AHB clock\n", __func__);
+
+	}
+	else {
+		val = readl(base + USB_SUSP_CTRL);
+		val |= USB_SUSP_CLR;
+		writel(val, base + USB_SUSP_CTRL);
+
+		if (utmi_wait_register(base + USB_SUSP_CTRL, USB_PHY_CLK_VALID,
+							USB_PHY_CLK_VALID) < 0)
+			pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
+
+		if (utmi_wait_register(base + USB_SUSP_CTRL, USB_CLKEN, USB_CLKEN) < 0)
+			pr_err("%s: timeout waiting for AHB clock\n", __func__);
+
+		val = readl(base + USB_SUSP_CTRL);
+		val &= ~USB_SUSP_CLR;
+		writel(val, base + USB_SUSP_CTRL);
+
 	}
 
-	val = readl(base + USB_PORTSC1);
-	val |= USB_PORTSC1_WKOC | USB_PORTSC1_WKDS | USB_PORTSC1_WKCN;
-	writel(val, base + USB_PORTSC1);
+	if (!phy->initialized) {
+		/* Fix VbusInvalid due to floating VBUS */
+		ret = usb_phy_io_write(phy->ulpi, 0x40, 0x08);
+	    if (ret)
+	            pr_err("%s: ulpi write 0x08 failed\n", __func__);
 
-	val = readl(base + USB_SUSP_CTRL);
-	val |= USB_SUSP_CLR;
-	writel(val, base + USB_SUSP_CTRL);
-	udelay(100);
-
-	val = readl(base + USB_SUSP_CTRL);
-	val &= ~USB_SUSP_CLR;
-	writel(val, base + USB_SUSP_CTRL);
+	    ret = usb_phy_io_write(phy->ulpi, 0x80, 0x0B);
+	    if (ret)
+	            pr_err("%s: ulpi write 0x0B failed\n", __func__);
+	    phy->initialized = 1;
+	}
 
 	return 0;
 }
@@ -654,7 +959,34 @@ static int ulpi_phy_power_off(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
 	void __iomem *base = phy->regs;
-	struct tegra_ulpi_config *config = phy->config;
+	int ret;
+
+	/* Disable VbusValid, SessEnd comparators */
+    ret = usb_phy_io_write(phy->ulpi, 0x00, 0x0D);
+    if (ret) {
+    	pr_err("%s: ulpi write 0x0D failed ret = %d\n", __func__, ret);
+    	phy->initialized = 0;
+    }
+
+    ret = usb_phy_io_write(phy->ulpi, 0x00, 0x10);
+	if (ret) {
+		pr_err("%s: ulpi write 0x10 failedr ret = %d\n", __func__, ret);
+		phy->initialized = 0;
+	}
+
+	/* Disable IdFloat comparator */
+	ret = usb_phy_io_write(phy->ulpi, 0x00, 0x19);
+	if (ret) {
+		pr_err("%s: ulpi write 0x19 failed ret = %d\n", __func__, ret);
+		phy->initialized = 0;
+    }
+
+	ret = usb_phy_io_write(phy->ulpi, 0x00, 0x1D);
+    if (ret) {
+       pr_err("%s: ulpi write 0x1D failed ret = %d\n", __func__, ret);
+       phy->initialized = 0;
+   }
+
 
 	/* Clear WKCN/WKDS/WKOC wake-on events that can cause the USB
 	 * Controller to immediately bring the ULPI PHY out of low power
@@ -663,8 +995,19 @@ static int ulpi_phy_power_off(struct tegra_usb_phy *phy)
 	val &= ~(USB_PORTSC1_WKOC | USB_PORTSC1_WKDS | USB_PORTSC1_WKCN);
 	writel(val, base + USB_PORTSC1);
 
-	clk_disable(phy->clk);
-	return gpio_direction_output(config->reset_gpio, 0);
+
+    /* Put the PHY in the low power mode */
+    val = readl(base + USB_PORTSC1);
+    val |= USB_PORTSC1_PHCD;
+    writel(val, base + USB_PORTSC1);
+
+    if (utmi_wait_register(base + USB_SUSP_CTRL, USB_PHY_CLK_VALID, 0) < 0) {
+    	pr_err("%s: timeout waiting for phy to stop\n", __func__);
+    	phy->initialized = 0;
+    }
+
+    clk_disable(phy->clk);
+	return 0;
 }
 
 static int	tegra_phy_init(struct usb_phy *x)
@@ -719,8 +1062,8 @@ static void tegra_usb_phy_close(struct usb_phy *x)
 	if (phy->vdd_reg) {
 		if (phy->vdd_reg_on)
 			regulator_disable(phy->vdd_reg);
-		regulator_put(phy->vdd_reg);
-	}
+			regulator_put(phy->vdd_reg);
+		}
 
 	clk_disable_unprepare(phy->pll_u);
 	clk_put(phy->pll_u);
@@ -742,19 +1085,17 @@ static int tegra_usb_phy_power_on(struct tegra_usb_phy *phy)
 
 static int tegra_usb_phy_power_off(struct tegra_usb_phy *phy)
 {
-	int ret;
 
 	if (phy_is_ulpi(phy))
-		ret = ulpi_phy_power_off(phy);
+		return ulpi_phy_power_off(phy);
 	else
-		ret = utmi_phy_power_off(phy);
+		return utmi_phy_power_off(phy);
 
 	if (phy->vdd_reg && phy->vdd_reg_on) {
 		regulator_disable(phy->vdd_reg);
 		phy->vdd_reg_on = false;
 	}
 
-	return ret;
 }
 
 static int	tegra_usb_phy_suspend(struct usb_phy *x, int suspend)
@@ -773,6 +1114,7 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	unsigned long parent_rate;
 	int i;
 	int err;
+
 
 	phy = kmalloc(sizeof(struct tegra_usb_phy), GFP_KERNEL);
 	if (!phy)
@@ -793,6 +1135,7 @@ struct tegra_usb_phy *tegra_usb_phy_open(struct device *dev, int instance,
 	phy->mode = phy_mode;
 	phy->dev = dev;
 	phy->vdd_reg_on = true;
+	phy->initialized = 0;
 
 	if (!phy->config) {
 		if (phy_is_ulpi(phy)) {
@@ -835,8 +1178,8 @@ err2:
 	clk_disable_unprepare(phy->pll_u);
 	clk_put(phy->pll_u);
 err1:
-	regulator_disable(phy->vdd_reg);
-	regulator_put(phy->vdd_reg);
+    regulator_disable(phy->vdd_reg);
+    regulator_put(phy->vdd_reg);
 err0:
 	kfree(phy);
 	return ERR_PTR(err);
@@ -862,6 +1205,8 @@ void tegra_ehci_phy_restore_start(struct tegra_usb_phy *phy,
 {
 	if (!phy_is_ulpi(phy))
 		utmi_phy_restore_start(phy, port_speed);
+	else
+		ulpi_phy_restore_start(phy, port_speed);
 }
 EXPORT_SYMBOL_GPL(tegra_ehci_phy_restore_start);
 
@@ -869,6 +1214,8 @@ void tegra_ehci_phy_restore_end(struct tegra_usb_phy *phy)
 {
 	if (!phy_is_ulpi(phy))
 		utmi_phy_restore_end(phy);
+	else
+		ulpi_phy_restore_end(phy);
 }
 EXPORT_SYMBOL_GPL(tegra_ehci_phy_restore_end);
 
