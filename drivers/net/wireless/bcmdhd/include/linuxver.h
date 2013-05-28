@@ -22,7 +22,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: linuxver.h 389248 2013-03-06 02:00:33Z $
+ * $Id: linuxver.h 397171 2013-04-17 14:22:23Z $
  */
 
 #ifndef _linuxver_h_
@@ -99,8 +99,9 @@
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
 #define USE_KTHREAD_API
-#define DAEMONIZE(a) {}
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
+#define DAEMONIZE(a)
+#elif ((LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)) && \
+	(LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0)))
 #define DAEMONIZE(a) daemonize(a); \
 	allow_signal(SIGKILL); \
 	allow_signal(SIGTERM);
@@ -170,6 +171,12 @@ typedef irqreturn_t(*FN_ISR) (int irq, void *dev_id, struct pt_regs *ptregs);
 
 #ifndef __exit
 #define __exit
+#endif
+#ifndef __devexit
+#define __devexit
+#endif
+#ifndef __devinit
+#define __devinit	__init
 #endif
 #ifndef __devinitdata
 #define __devinitdata
@@ -485,9 +492,11 @@ pci_restore_state(struct pci_dev *dev, u32 *buffer)
 #define SET_NETDEV_DEV(net, pdev)	do {} while (0)
 #endif
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
 #ifndef HAVE_FREE_NETDEV
 #define free_netdev(dev)		kfree(dev)
 #endif
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0) */
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 0))
 /* struct packet_type redefined in 2.6.x */
