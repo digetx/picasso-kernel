@@ -348,7 +348,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 			      ARRAY_SIZE(tegra_wm8903_mic_jack_pins),
 			      tegra_wm8903_mic_jack_pins);
 	wm8903_mic_detect(codec, &tegra_wm8903_mic_jack, SND_JACK_MICROPHONE,
-				0);
+				SND_JACK_MICROPHONE);
 
 	snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
 
