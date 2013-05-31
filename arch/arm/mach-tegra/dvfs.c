@@ -23,8 +23,6 @@ static bool dvfs_enabled;
 static struct device *dvfs_dev;
 static struct regulator *cpu_reg, *core_reg, *rtc_reg;
 
-struct dvfs_domain;
-
 struct dvfs_client {
 	struct delayed_work	work;
 	struct dvfs_domain	*dvfs;
@@ -428,7 +426,7 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 			mutex_unlock(&dvfs_lock);
 		}
 		break;
-	
+
 	case PRE_ENABLE_CHANGE:
 		dev_dbg(dvfs_dev, "%s PRE enable change\n", client->clk_name);
 
