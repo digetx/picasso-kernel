@@ -508,6 +508,35 @@ static ssize_t sysconf_store(struct device *dev,
 	return n;
 }
 
+static ssize_t audioconf_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	s32 ret = ec_read_word_data(AUDIO_CTRL) & SYSCONF_MASK;
+
+	return sprintf(buf, "%d\n", ret);
+}
+
+static ssize_t audioconf_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char * buf, size_t n)
+{
+	s32 ret;
+	int val;
+
+	ret = kstrtoint(buf, 10, &val);
+	if (ret < 0) {
+		dev_err(dev,
+			"%s: failed to convert str: %s\n", __func__, buf);
+		return n;
+	}
+	val &= SYSCONF_MASK;
+
+	ec_write_word_data(AUDIO_CTRL, val);
+
+	return n;
+}
+
 static DEVICE_ATTR(GyroGain, 0666, gyro_show, gyro_store);
 static DEVICE_ATTR(PowerLED, 0222, NULL, pwr_led_on_store);
 static DEVICE_ATTR(ChargeLED, 0222, NULL, chrg_led_on_store);
@@ -522,6 +551,7 @@ static DEVICE_ATTR(ThreeGPower, 0666, status_3g_show, status_3g_store);
 static DEVICE_ATTR(GPSPower, 0666, status_gps_show, status_gps_store);
 static DEVICE_ATTR(Cabc, 0666, cabc_show, cabc_store);
 static DEVICE_ATTR(SystemConfig, 0666, sysconf_show, sysconf_store);
+static DEVICE_ATTR(MicSwitch, 0666, audioconf_show, audioconf_store);
 
 static struct attribute *ec_control_attrs[] = {
 	&dev_attr_GyroGain.attr,
@@ -538,6 +568,7 @@ static struct attribute *ec_control_attrs[] = {
 	&dev_attr_GPSPower.attr,
 	&dev_attr_Cabc.attr,
 	&dev_attr_SystemConfig.attr,
+	&dev_attr_MicSwitch.attr,
 	NULL,
 };
 
