@@ -532,6 +532,13 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 		if (__clk_get_enable_count(client->clk)) {
 			unsigned long rate = clk_get_rate(client->clk);
 
+			/*
+			 * cpu freqs are defined in MHz while rate is in Hz,
+			 * so convert rate to KHz
+			 */
+			if (dvfs == &dvfs_cpu)
+				rate /= 1000;
+
 			list_add(&client->node, &dvfs->active_clients);
 			update_freq_index(client, rate);
 
