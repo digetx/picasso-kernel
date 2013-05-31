@@ -1760,6 +1760,11 @@ static struct snd_soc_dai_driver wm8903_dai = {
 
 static int wm8903_suspend(struct snd_soc_codec *codec)
 {
+	struct wm8903_priv *wm8903 = snd_soc_codec_get_drvdata(codec);
+
+	if (wm8903->irq)
+		disable_irq(wm8903->irq);
+
 	wm8903_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	return 0;
@@ -1768,6 +1773,9 @@ static int wm8903_suspend(struct snd_soc_codec *codec)
 static int wm8903_resume(struct snd_soc_codec *codec)
 {
 	struct wm8903_priv *wm8903 = snd_soc_codec_get_drvdata(codec);
+
+	if (wm8903->irq)
+		enable_irq(wm8903->irq);
 
 	regcache_sync(wm8903->regmap);
 
@@ -2047,6 +2055,7 @@ static int wm8903_i2c_probe(struct i2c_client *i2c,
 	}
 
 	i2c_set_clientdata(i2c, wm8903);
+	wm8903->irq = i2c->irq;
 
 	/* If no platform data was supplied, create storage for defaults */
 	if (pdata) {
