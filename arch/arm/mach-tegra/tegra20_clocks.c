@@ -1309,6 +1309,12 @@ static int tegra20_periph_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 	u32 val;
 	int divider;
 
+	if (c->max_rate)
+		rate = min(c->max_rate, rate);
+
+	if (c->min_rate)
+		rate = max(c->min_rate, rate);
+
 	val = clk_readl(c->reg);
 
 	if (c->flags & DIV_U71) {
@@ -1349,12 +1355,6 @@ static long tegra20_periph_clk_round_rate(struct clk_hw *hw,
 	struct clk_tegra *c = to_clk_tegra(hw);
 	unsigned long parent_rate = __clk_get_rate(__clk_get_parent(hw->clk));
 	int divider;
-
-	if (c->max_rate)
-		rate = min(c->max_rate, rate);
-
-	if (c->min_rate)
-		rate = max(c->min_rate, rate);
 
 	if (prate)
 		parent_rate = *prate;
