@@ -229,12 +229,27 @@ static void update_core_vdd(int new_core_vdd)
 		dvfs_update_core_voltage(new_core_vdd);
 }
 
-static void dvfs_set_nominal_voltages(void)
+static int dvfs_get_cpu_voltage(void)
 {
-	update_core_vdd(CORE_NOMINAL_VDD * 1000);
+	struct dvfs_client *cpu_client = dvfs_cpu.clients[0];
 
-	if (regulator_get_voltage(cpu_reg) != CPU_NOMINAL_VDD * 1000)
-		dvfs_update_cpu_voltage(CPU_NOMINAL_VDD * 1000);
+	dev_dbg(dvfs_dev, "cpu client index = %d\n", cpu_client->index);
+
+	return dvfs_cpu.voltages_mv[cpu_client->index] * 1000;
+}
+
+static int dvfs_get_core_voltage(void)
+{
+	struct dvfs_client *client;
+	unsigned dvfs_core_index = 0;
+
+	list_for_each_entry(client, &dvfs_core.active_clients, node) {
+		dev_dbg(dvfs_dev, "active core client %s index = %d\n",
+			client->clk_name, client->index);
+		dvfs_core_index = max(client->index, dvfs_core_index);
+	}
+
+	return dvfs_core.voltages_mv[dvfs_core_index] * 1000;
 }
 
 /*
@@ -242,35 +257,9 @@ static void dvfs_set_nominal_voltages(void)
  * 	1) VDD_CORE – VDD_CPU >/= 100mV
  * 	2) VDD_CORE must stay within 170mV of VDD_RTC when VDD_CORE is powered
  */
-static void update_voltages(void)
+static void update_voltages(int new_cpu_vdd, int new_core_vdd)
 {
-	struct dvfs_client *client, *cpu_client = dvfs_cpu.clients[0];
-	unsigned dvfs_core_index = 0, dvfs_cpu_index;
-	int new_cpu_vdd, new_core_vdd;
-	int current_cpu_vdd;
-
-	if (!dvfs_enabled)
-		return;
-
-	/*
-	 * Get core index
-	 */
-	list_for_each_entry(client, &dvfs_core.active_clients, node) {
-		dev_dbg(dvfs_dev, "active core client %s index = %d\n",
-			client->clk_name, client->index);
-		dvfs_core_index = max(client->index, dvfs_core_index);
-	}
-
-	dvfs_cpu_index = cpu_client->index;
-
-	dev_dbg(dvfs_dev, "cpu client index = %d\n", dvfs_cpu_index);
-
-	/*
-	 * Get current local vdd's vals
-	 * NOTE: cpu is the only client of it's power domain
-	 */
-	new_core_vdd = dvfs_core.voltages_mv[dvfs_core_index] * 1000;
-	new_cpu_vdd = dvfs_cpu.voltages_mv[dvfs_cpu_index] * 1000;
+	int current_cpu_vdd = regulator_get_voltage(cpu_reg);
 
 	/*
 	 * Recalc vdd's according to rules
@@ -279,12 +268,7 @@ static void update_voltages(void)
 		new_core_vdd = new_cpu_vdd + _100uV;
 
 	/*
-	 * Perform regulators update
-	 */
-	current_cpu_vdd = regulator_get_voltage(cpu_reg);
-
-	/*
-	 * Who goes update first?
+	 * What goes update first?
 	 */
 	if (new_core_vdd - current_cpu_vdd < _100uV) {
 		if (current_cpu_vdd != new_cpu_vdd)
@@ -331,7 +315,8 @@ static int dvfs_cpu_change_notify(struct notifier_block *nb,
 			mutex_lock(&dvfs_lock);
 
 			update_freq_index(client, freqs->new);
-			update_voltages();
+			update_voltages(dvfs_get_cpu_voltage(),
+					dvfs_get_core_voltage());
 
 			mutex_unlock(&dvfs_lock);
 		}
@@ -348,7 +333,8 @@ static int dvfs_cpu_change_notify(struct notifier_block *nb,
 			mutex_lock(&dvfs_lock);
 
 			update_freq_index(client, freqs->new);
-			update_voltages();
+			update_voltages(dvfs_get_cpu_voltage(),
+					dvfs_get_core_voltage());
 
 			mutex_unlock(&dvfs_lock);
 		}
@@ -373,7 +359,7 @@ static void deferred_disable(struct work_struct *work)
 	mutex_lock(&dvfs_lock);
 
 	list_del_init(&client->node);
-	update_voltages();
+	update_voltages(dvfs_get_cpu_voltage(), dvfs_get_core_voltage());
 
 	mutex_unlock(&dvfs_lock);
 	mutex_unlock(&client->deferred_work_lock);
@@ -397,7 +383,8 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 			mutex_lock(&dvfs_lock);
 
 			update_freq_index(client, cnd->new_rate);
-			update_voltages();
+			update_voltages(dvfs_get_cpu_voltage(),
+					dvfs_get_core_voltage());
 
 			mutex_unlock(&dvfs_lock);
 		}
@@ -414,7 +401,8 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 			mutex_lock(&dvfs_lock);
 
 			update_freq_index(client, cnd->new_rate);
-			update_voltages();
+			update_voltages(dvfs_get_cpu_voltage(),
+					dvfs_get_core_voltage());
 
 			mutex_unlock(&dvfs_lock);
 		}
@@ -432,7 +420,8 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 			mutex_lock(&dvfs_lock);
 
 			list_add(&client->node, &client->dvfs->active_clients);
-			update_voltages();
+			update_voltages(dvfs_get_cpu_voltage(),
+					dvfs_get_core_voltage());
 
 			mutex_unlock(&dvfs_lock);
 		} else {
@@ -565,14 +554,13 @@ static void dvfs_release(struct dvfs_domain *dvfs)
 
 static void dvfs_start_locked(void)
 {
-	dvfs_set_nominal_voltages();
 	dvfs_enabled = true;
-	update_voltages();
+	update_voltages(dvfs_get_cpu_voltage(), dvfs_get_core_voltage());
 }
 
 static void dvfs_stop_locked(void)
 {
-	dvfs_set_nominal_voltages();
+	update_voltages(CPU_MAX_VDD * 1000, CORE_MAX_VDD * 1000);
 	dvfs_enabled = false;
 }
 
