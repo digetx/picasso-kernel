@@ -207,29 +207,22 @@ static void update_core_vdd(int new_core_vdd)
 	int core_rtc_delta = new_core_vdd - current_rtc_vdd;
 
 	if (abs(core_rtc_delta) > _170uV) {
-		int update_step, steps_nb, new_rtc_vdd, rtc_vdd_limit;
+		int update_step, steps_nb;
 
 		if (current_rtc_vdd != current_core_vdd)
 			dvfs_update_rtc_voltage(current_core_vdd);
 
-		if (core_rtc_delta > 0) {
-			rtc_vdd_limit = RTC_MAX_VDD * 1000;
-			update_step = UPDATE_STEP;
-		} else {
-			rtc_vdd_limit = RTC_MIN_VDD * 1000;
-			update_step = -UPDATE_STEP;
-		}
+		update_step = (core_rtc_delta > 0) ? UPDATE_STEP : -UPDATE_STEP;
 
-		new_rtc_vdd = max(new_core_vdd, rtc_vdd_limit);
-		steps_nb = abs(current_rtc_vdd - new_rtc_vdd) / UPDATE_STEP - 1;
+		steps_nb = abs(new_core_vdd - current_core_vdd) / UPDATE_STEP;
 
 		dev_dbg(dvfs_dev, "steps_nb = %d\n", steps_nb);
 
-		do {
+		while (steps_nb--) {
 			current_core_vdd += update_step;
 			dvfs_update_rtc_voltage(current_core_vdd);
 			dvfs_update_core_voltage(current_core_vdd);
-		} while (--steps_nb > 0);
+		};
 	}
 
 	if (current_core_vdd != new_core_vdd)
