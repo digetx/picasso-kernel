@@ -62,7 +62,6 @@ struct dvfs_domain {
 
 /* cpu domain defines */
 #define CPU_MAX_VDD		1125
-#define CPU_NOMINAL_VDD		1000
 
 #define CPU_MILLIVOLTS		750,	775,	825,	875,	925, \
 				950,	1000,	1100,	CPU_MAX_VDD
@@ -72,7 +71,6 @@ struct dvfs_domain {
 
 /* core domain defines */
 #define CORE_MAX_VDD		1300
-#define CORE_NOMINAL_VDD	1225
 
 #define CORE_MILLIVOLTS		1100,	1125,	1150,	1200, \
 				1225,	1250,	1275,	CORE_MAX_VDD
@@ -117,7 +115,6 @@ struct dvfs_domain {
 /* rtc domain defines */
 #define RTC_MAX_VDD		1300
 #define RTC_MIN_VDD		950
-#define RTC_NOMINAL_VDD		RTC_MAX_VDD
 
 DVFS_CLIENT(cpu, CPU_FREQS);
 DVFS(cpu, CPU_MILLIVOLTS, &dvfs_cpu_client);
