@@ -648,7 +648,7 @@ config ARCH_TEGRA
 	select HAVE_CLK
 	select HAVE_SMP
 	select MIGHT_HAVE_CACHE_L2X0
-	select MAY_HAVE_SPARSE_IRQ
+	select SPARSE_IRQ
 	select NEED_MACH_MEMORY_H
 	select USE_OF
 	help
