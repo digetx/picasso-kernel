@@ -46,24 +46,6 @@
 
 static int t30_num_alloc_channels = 0;
 
-static struct resource tegra_host1x01_resources[] = {
-	{
-		.start = TEGRA_HOST1X_BASE,
-		.end = TEGRA_HOST1X_BASE + TEGRA_HOST1X_SIZE - 1,
-		.flags = IORESOURCE_MEM,
-	},
-	{
-		.start = INT_SYNCPT_THRESH_BASE,
-		.end = INT_SYNCPT_THRESH_BASE + INT_SYNCPT_THRESH_NR - 1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = INT_HOST1X_MPCORE_GENERAL,
-		.end = INT_HOST1X_MPCORE_GENERAL,
-		.flags = IORESOURCE_IRQ,
-	},
-};
-
 static const char *s_syncpt_names[32] = {
 	"gfx_host",
 	"", "", "", "", "", "", "",
@@ -94,8 +76,6 @@ static struct nvhost_device tegra_host1x01_device = {
 	.dev		= {.platform_data = &host1x01_info},
 	.name		= "host1x",
 	.id		= -1,
-	.resource	= tegra_host1x01_resources,
-	.num_resources	= ARRAY_SIZE(tegra_host1x01_resources),
 	.clocks		= {{"host1x", UINT_MAX}, {} },
 	NVHOST_MODULE_NO_POWERGATE_IDS,
 };
