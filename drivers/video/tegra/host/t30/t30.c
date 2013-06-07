@@ -31,7 +31,6 @@
 #include "nvhost_memmgr.h"
 #include "host1x/host1x_syncpt.h"
 
-#include <mach/irqs.h>
 #include <mach/powergate.h>
 
 #define NVMODMUTEX_2D_FULL	(1)
