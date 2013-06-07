@@ -325,6 +325,12 @@ static struct notifier_block picasso_reboot_notifier = {
 
 static __initdata struct tegra_clk_init_table tegra_picasso_clk_init_table[] = {
 	{ "pwm",	"clk_m",	12000000,	false },
+	{ "mpe",	"pll_c",	0,		false },
+	{ "epp",	"pll_c",	0,		false },
+	{ "vi_sensor",	"pll_c",	0,		false },
+	{ "vi",		"pll_c",	0,		false },
+	{ "2d",		"pll_c",	0,		false },
+	{ "3d",		"pll_c",	0,		false },
 	{ NULL,		NULL,		0,		0 },
 };
 
