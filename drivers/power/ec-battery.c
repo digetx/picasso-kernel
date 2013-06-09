@@ -357,6 +357,9 @@ static int ec_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	if (power_supply_am_i_supplied(&chip->power_supply))
+		chip->is_supplied = true;
+
 	INIT_DELAYED_WORK(&chip->work, ec_delayed_work);
 	schedule_work(&chip->work.work);
 
