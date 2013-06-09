@@ -26,40 +26,17 @@ EXPORT_SYMBOL_GPL(power_supply_class);
 
 static struct device_type power_supply_dev_type;
 
-static int __power_supply_is_supplied_by(struct power_supply *supplier,
-					 struct power_supply *supply)
-{
-	int i;
-#ifdef CONFIG_OF
-	struct power_supply_supplies *pss;
-#endif
-
-#ifdef CONFIG_OF
-	list_for_each_entry(pss, &supply->supplies.list, list) {
-		if (supplier->supplies.node == pss->node)
-			return 0;
-	}
-#endif
-
-	for (i = 0; i < supplier->num_supplicants; i++) {
-		if (!supply->name || !supplier->supplied_to)
-			continue;
-		if (!strcmp(supplier->supplied_to[i], supply->name))
-			return 0;
-	}
-
-	return -EINVAL;
-}
-
 static int __power_supply_changed_work(struct device *dev, void *data)
 {
 	struct power_supply *psy = (struct power_supply *)data;
 	struct power_supply *pst = dev_get_drvdata(dev);
+	int i;
 
-	if (__power_supply_is_supplied_by(psy, pst)) {
-		if (pst->external_power_changed)
-			pst->external_power_changed(pst);
-	}
+	for (i = 0; i < psy->num_supplicants; i++)
+		if (!strcmp(psy->supplied_to[i], pst->name)) {
+			if (pst->external_power_changed)
+				pst->external_power_changed(pst);
+		}
 	return 0;
 }
 
@@ -108,9 +85,13 @@ static int __power_supply_am_i_supplied(struct device *dev, void *data)
 	union power_supply_propval ret = {0,};
 	struct power_supply *psy = (struct power_supply *)data;
 	struct power_supply *epsy = dev_get_drvdata(dev);
+	int i;
 
-	if (__power_supply_is_supplied_by(epsy, psy)) {
-		if (!epsy->get_property(epsy, POWER_SUPPLY_PROP_ONLINE, &ret)) {
+	for (i = 0; i < epsy->num_supplicants; i++) {
+		if (!strcmp(epsy->supplied_to[i], psy->name)) {
+			if (epsy->get_property(epsy,
+				  POWER_SUPPLY_PROP_ONLINE, &ret))
+				continue;
 			if (ret.intval)
 				return ret.intval;
 		}
@@ -370,9 +351,6 @@ int power_supply_register(struct device *parent, struct power_supply *psy)
 	dev_set_drvdata(dev, psy);
 	psy->dev = dev;
 
-#ifdef CONFIG_OF
-	INIT_LIST_HEAD(&psy->supplies.list);
-#endif
 	INIT_WORK(&psy->changed_work, power_supply_changed_work);
 
 	rc = kobject_set_name(&dev->kobj, "%s", psy->name);

@@ -16,7 +16,6 @@
 #include <linux/wakelock.h>
 #include <linux/workqueue.h>
 #include <linux/leds.h>
-#include <linux/list.h>
 
 struct device;
 
@@ -162,20 +161,12 @@ union power_supply_propval {
 	const char *strval;
 };
 
-struct power_supply_supplies {
-	struct device_node *node;
-	struct list_head list;
-};
-
 struct power_supply {
 	const char *name;
 	enum power_supply_type type;
 	enum power_supply_property *properties;
 	size_t num_properties;
 
-#ifdef CONFIG_OF
-	struct power_supply_supplies supplies;
-#endif
 	char **supplied_to;
 	size_t num_supplicants;
 
