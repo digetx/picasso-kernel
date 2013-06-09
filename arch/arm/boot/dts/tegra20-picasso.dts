@@ -605,9 +605,17 @@
 				reg = <0x58>;
 				ec,i2c-retry-count = <5>;
 				ec,lsc-start-delay = <25000>;
-				power-supply = <&gpio_charger>;
 				system-power-controller;
 				leds-reset;
+
+				battery {
+					compatible = "ec,ec-battery";
+					power-supply = <&gpio_charger>;
+				};
+
+				leds {
+					compatible = "ec,ec-leds";
+				};
 			};
 		};
 	};
