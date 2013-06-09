@@ -74,7 +74,6 @@ static enum power_supply_property ec_properties[] = {
 };
 
 struct ec_battery_info {
-	struct device			*dev;
 	struct delayed_work		work;
 	struct notifier_block		panic_notifier;
 	struct power_supply		power_supply;
@@ -166,7 +165,7 @@ static int ec_get_battery_property(int reg_offset,
 	return 0;
 }
 
-static void  ec_unit_adjustment(struct ec_battery_info *chip,
+static void  ec_unit_adjustment(struct power_supply *psy,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
 {
@@ -190,7 +189,7 @@ static void  ec_unit_adjustment(struct ec_battery_info *chip,
 		break;
 
 	default:
-		dev_dbg(chip->dev,
+		dev_dbg(psy->dev,
 			"%s: no need for unit conversion %d\n", __func__, psp);
 	}
 }
@@ -219,7 +218,7 @@ static int ec_get_battery_serial_number(union power_supply_propval *val)
 	return 0;
 }
 
-static int ec_get_property_index(struct ec_battery_info *chip,
+static int ec_get_property_index(struct power_supply *psy,
 				 enum power_supply_property psp)
 {
 	int count;
@@ -227,8 +226,7 @@ static int ec_get_property_index(struct ec_battery_info *chip,
 		if (psp == ec_data[count].psp)
 			return count;
 
-	dev_warn(chip->dev,
-		 "%s: Invalid Property - %d\n", __func__, psp);
+	dev_warn(psy->dev, "%s: Invalid Property - %d\n", __func__, psp);
 
 	return -EINVAL;
 }
@@ -255,7 +253,6 @@ static int ec_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_STATUS:
-		ec_get_battery_capacity(chip);
 		ec_get_battery_status(chip, val);
 		break;
 
@@ -272,7 +269,7 @@ static int ec_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 	case POWER_SUPPLY_PROP_TEMP:
-		ret = ec_get_property_index(chip, psp);
+		ret = ec_get_property_index(psy, psp);
 		if (ret < 0)
 			break;
 
@@ -280,17 +277,17 @@ static int ec_get_property(struct power_supply *psy,
 		break;
 
 	default:
-		dev_err(chip->dev,
+		dev_err(psy->dev,
 			"%s: INVALID property\n", __func__);
 		return -EINVAL;
 	}
 
 	if (!ret) {
 		/* Convert units to match requirements for power supply class */
-		ec_unit_adjustment(chip, psp, val);
+		ec_unit_adjustment(psy, psp, val);
 	}
 
-	dev_dbg(chip->dev,
+	dev_dbg(psy->dev,
 		"%s: property = %d, value = %x\n", __func__, psp, val->intval);
 
 	/* battery not present, so return NODATA for properties */
@@ -307,7 +304,7 @@ static void ec_external_power_changed(struct power_supply *psy)
 
 	chip = container_of(psy, struct ec_battery_info, power_supply);
 
-	supplied_state= power_supply_am_i_supplied(psy);
+	supplied_state = power_supply_am_i_supplied(psy);
 
 	/* suppress bogus notifications */
 	if (chip->is_supplied != supplied_state) {
@@ -357,7 +354,6 @@ static int ec_probe(struct platform_device *pdev)
 	if (!chip)
 		return -ENOMEM;
 
-	chip->dev = &pdev->dev;
 	chip->poll_interval = POLL_TIME_DEFAULT;
 	chip->capacity = -1;
 
