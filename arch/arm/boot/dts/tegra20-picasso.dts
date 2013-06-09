@@ -610,7 +610,7 @@
 
 				battery {
 					compatible = "ec,ec-battery";
-					power-supply = <&gpio_charger>;
+					power-supplies = <&gpio_charger>;
 				};
 
 				leds {
