@@ -730,9 +730,11 @@ EXPORT_SYMBOL(get_board_id);
 static struct mfd_cell ec_cell[] = {
 	{
 		.name = "ec-battery",
+		.of_compatible = "ec,ec-battery",
 	},
 	{
 		.name = "ec-leds",
+		.of_compatible = "ec,ec-leds",
 	},
 };
 
