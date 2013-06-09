@@ -16,11 +16,7 @@
 #include <linux/mfd/ec-control.h>
 
 #define BATTERY_NAME			"ec-battery"
-#define POLL_TIME_DEFAULT		360
-#define POLL_TIME_CHARGING		60
-#define POLL_TIME_MIN			25
-#define POLL_TIME_THROTTLE		120
-#define CAPACITY_LOW			7
+#define POLL_TIME_DEFAULT		60
 
 enum {
 	REG_VOLTAGE,
@@ -326,19 +322,8 @@ static void ec_delayed_work(struct work_struct *work)
 
 	capacity_changed = ec_get_battery_capacity(chip);
 
-	if (capacity_changed) {
+	if (capacity_changed)
 		power_supply_changed(&chip->power_supply);
-
-		/* reduce poll time on low battery */
-		if (chip->capacity < CAPACITY_LOW) {
-			chip->poll_interval -= POLL_TIME_THROTTLE;
-			chip->poll_interval =
-					max(chip->poll_interval, POLL_TIME_MIN);
-		} else if (chip->is_supplied)
-			chip->poll_interval = POLL_TIME_CHARGING;
-		else
-			chip->poll_interval = POLL_TIME_DEFAULT;
-        }
 
 	/* send continuous uevent notify to android */
 	set_timer_slack(&chip->work.timer, chip->poll_interval * HZ / 4);
