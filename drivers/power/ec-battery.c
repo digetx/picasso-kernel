@@ -138,13 +138,8 @@ static void ec_get_battery_status(struct ec_battery_info *chip,
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		else
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
-	}
-	else {
-		if (chip->is_supplied)
-			val->intval = POWER_SUPPLY_STATUS_FULL;
-		else
-			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-	}
+	} else
+		val->intval = POWER_SUPPLY_STATUS_FULL;
 }
 
 static int ec_get_battery_property(int reg_offset,
