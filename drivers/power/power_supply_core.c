@@ -103,39 +103,6 @@ void power_supply_changed(struct power_supply *psy)
 }
 EXPORT_SYMBOL_GPL(power_supply_changed);
 
-#ifdef CONFIG_OF
-#include <linux/of.h>
-
-int power_supply_register_supplicant(struct power_supply *psy)
-{
-	struct device_node *np;
-	int i = 0;
-
-	if (!psy->supplies.node)
-		return -EINVAL;
-
-	do {
-		struct power_supply_supplies *lst;
-
-		np = of_parse_phandle(psy->supplies.node, "power-supply", i++);
-		if (!np)
-			continue;
-
-		lst = devm_kzalloc(psy->dev->parent, sizeof(*lst), GFP_KERNEL);
-		if (!lst) {
-			dev_warn(psy->dev->parent,
-				 "Failed to alloc mem for supplies list\n");
-			return -ENOMEM;
-		}
-
-		lst->node = np;
-		list_add(&(lst->list), &(psy->supplies.list));
-	} while (np);
-
-	return 0;
-}
-#endif
-
 static int __power_supply_am_i_supplied(struct device *dev, void *data)
 {
 	union power_supply_propval ret = {0,};
@@ -405,8 +372,6 @@ int power_supply_register(struct device *parent, struct power_supply *psy)
 
 #ifdef CONFIG_OF
 	INIT_LIST_HEAD(&psy->supplies.list);
-
-	power_supply_register_supplicant(psy);
 #endif
 	INIT_WORK(&psy->changed_work, power_supply_changed_work);
 
