@@ -348,6 +348,7 @@ static int ec_probe(struct platform_device *pdev)
 	chip->power_supply.num_properties = ARRAY_SIZE(ec_properties);
 	chip->power_supply.get_property = ec_get_property;
 	chip->power_supply.external_power_changed = ec_external_power_changed;
+	chip->power_supply.of_node = pdev->dev.of_node;
 
 	ret = power_supply_register(&pdev->dev, &chip->power_supply);
 	if (ret) {
