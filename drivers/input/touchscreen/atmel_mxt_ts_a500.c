@@ -1589,7 +1589,8 @@ static struct mxt_platform_data *mxt_parse_dt(struct i2c_client *client,
 		return NULL;
 	pdata->config = config;
 
-	if (of_property_read_bool(of_node, "android-evdev")) {
+	if (IS_ENABLED(CONFIG_ANDROID) &&
+			of_property_read_bool(of_node, "android-evdev")) {
 		data->android = true;
 
 		if (of_property_read_bool(of_node, "multislot-proto"))
