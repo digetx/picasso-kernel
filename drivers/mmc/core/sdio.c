@@ -323,8 +323,8 @@ static int mmc_sdio_switch_hs(struct mmc_card *card, int enable)
 	if (!(card->host->caps & MMC_CAP_SD_HIGHSPEED))
 		return 0;
 
-	if (!card->cccr.high_speed)
-		return 0;
+// 	if (!card->cccr.high_speed)
+// 		return 0;
 
 	ret = mmc_io_rw_direct(card, 0, 0, SDIO_CCCR_SPEED, 0, &speed);
 	if (ret)
