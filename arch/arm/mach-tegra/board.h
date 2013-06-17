@@ -58,5 +58,6 @@ static inline int harmony_pcie_init(void) { return 0; }
 void __init tegra_paz00_wifikill_init(void);
 
 void __init tegra_picasso_bluetooth_rfkill_init(void);
+void __init tegra_picasso_wifi_init(void);
 
 #endif

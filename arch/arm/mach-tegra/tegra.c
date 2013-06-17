@@ -146,8 +146,10 @@ static void __init paz00_init(void)
 
 static void __init picasso_init(void)
 {
-	if (IS_ENABLED(CONFIG_ARCH_TEGRA_2x_SOC))
+	if (IS_ENABLED(CONFIG_ARCH_TEGRA_2x_SOC)) {
 		tegra_picasso_bluetooth_rfkill_init();
+		tegra_picasso_wifi_init();
+	}
 }
 
 static struct {
