@@ -733,6 +733,21 @@
 		clock-names = "pll_a", "pll_a_out0", "mclk";
 	};
 
+	serial@70006040 {
+		compatible = "nvidia,tegra20-hsuart";
+		status = "okay";
+	};
+
+	serial@70006200 {
+		compatible = "nvidia,tegra20-hsuart";
+		status = "okay";
+	};
+
+	serial@70006300 {
+		compatible = "nvidia,tegra20-hsuart";
+		status = "okay";
+	};
+
 	memory-controller@7000f400 {
 		nvidia,use-ram-code;
 
