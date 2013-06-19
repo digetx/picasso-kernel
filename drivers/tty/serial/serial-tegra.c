@@ -187,7 +187,6 @@ static void set_rts(struct tegra_uart_port *tup, bool active)
 		tegra_uart_write(tup, mcr, UART_MCR);
 		tup->mcr_shadow = mcr;
 	}
-	return;
 }
 
 static void set_dtr(struct tegra_uart_port *tup, bool active)
@@ -203,7 +202,6 @@ static void set_dtr(struct tegra_uart_port *tup, bool active)
 		tegra_uart_write(tup, mcr, UART_MCR);
 		tup->mcr_shadow = mcr;
 	}
-	return;
 }
 
 static void tegra_uart_set_mctrl(struct uart_port *u, unsigned int mctrl)
@@ -218,7 +216,6 @@ static void tegra_uart_set_mctrl(struct uart_port *u, unsigned int mctrl)
 
 	dtr_enable = !!(mctrl & TIOCM_DTR);
 	set_dtr(tup, dtr_enable);
-	return;
 }
 
 static void tegra_uart_break_ctl(struct uart_port *u, int break_ctl)
@@ -490,7 +487,6 @@ static void tegra_uart_stop_tx(struct uart_port *u)
 	async_tx_ack(tup->tx_dma_desc);
 	xmit->tail = (xmit->tail + count) & (UART_XMIT_SIZE - 1);
 	tup->tx_in_progress = 0;
-	return;
 }
 
 static void tegra_uart_handle_rx_pio(struct tegra_uart_port *tup,
@@ -512,8 +508,6 @@ static void tegra_uart_handle_rx_pio(struct tegra_uart_port *tup,
 		if (!uart_handle_sysrq_char(&tup->uport, ch) && tty)
 			tty_insert_flip_char(tty, ch, flag);
 	} while (1);
-
-	return;
 }
 
 static void tegra_uart_copy_rx_to_tty(struct tegra_uart_port *tup,
@@ -643,7 +637,6 @@ static void tegra_uart_handle_modem_signal_change(struct uart_port *u)
 	/* Will start/stop_tx accordingly */
 	if (msr & UART_MSR_DCTS)
 		uart_handle_cts_change(&tup->uport, msr & UART_MSR_CTS);
-	return;
 }
 
 static irqreturn_t tegra_uart_isr(int irq, void *data)
@@ -759,7 +752,6 @@ static void tegra_uart_stop_rx(struct uart_port *u)
 		tty_flip_buffer_push(port);
 		tty_kref_put(tty);
 	}
-	return;
 }
 
 static void tegra_uart_hw_deinit(struct tegra_uart_port *tup)
