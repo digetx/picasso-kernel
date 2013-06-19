@@ -18,4 +18,9 @@
 #ifndef _MACH_TEGRA_BOARD_PICASSO_H
 #define _MACH_TEGRA_BOARD_PICASSO_H
 
+#include "gpio-names.h"
+
+#define PICASSO_BCM_VDD			TEGRA_GPIO_PD1
+#define PICASSO_BLUETOOTH_RST		TEGRA_GPIO_PU0
+
 #endif
