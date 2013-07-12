@@ -153,7 +153,7 @@
 #define MXT_RESET_TIME		200	/* msec */
 #define MXT_RESET_NOCHGREAD     400     /* msec */
 
-#define MXT_WAKEUP_TIME		25	/* msec */
+#define MXT_WAKEUP_TIME		50	/* msec */
 
 #define MXT_FWRESET_TIME	175	/* msec */
 
