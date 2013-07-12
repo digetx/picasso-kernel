@@ -1353,19 +1353,26 @@ static int tegra_dc_init(struct tegra_dc *dc)
 	return 0;
 }
 
-static int tegra_dc_panel_enable_common(struct tegra_dc *dc)
+void tegra_enable_backlight(struct tegra_dc *dc)
 {
+	if (dc->out->type != TEGRA_DC_OUT_RGB)
+		return;
+
+	if (!IS_ERR_OR_NULL(dc->out->bl_vdd))
+		regulator_enable(dc->out->bl_vdd);
+}
+
+int tegra_dc_panel_enable_common(struct tegra_dc *dc)
+{
+	if (dc->out->panel_enabled)
+		return 0;
+
 	switch (dc->out->type) {
 		case TEGRA_DC_OUT_RGB:
 			if (!IS_ERR_OR_NULL(dc->out->pnl_vdd))
 				regulator_enable(dc->out->pnl_vdd);
 			if (!IS_ERR_OR_NULL(dc->out->lvds_vdd))
 				regulator_enable(dc->out->lvds_vdd);
-
-			mdelay(dc->out->lvds_to_bl_timeout);
-
-			if (!IS_ERR_OR_NULL(dc->out->bl_vdd))
-				regulator_enable(dc->out->bl_vdd);
 			break;
 		case TEGRA_DC_OUT_HDMI:
 			if (!IS_ERR_OR_NULL(dc->out->hdmi_vdd))
@@ -1377,17 +1384,30 @@ static int tegra_dc_panel_enable_common(struct tegra_dc *dc)
 			break;
 		default:
 			dev_err(&dc->ndev->dev, "wrong dc type\n");
+			return 0;
 	};
 
-	return 0;
+	dc->out->panel_enabled = true;
+
+	return 1;
 }
 
-static int tegra_dc_panel_disable_common(struct tegra_dc *dc)
+void tegra_disable_backlight(struct tegra_dc *dc)
 {
+	if (dc->out->type != TEGRA_DC_OUT_RGB)
+		return;
+
+	if (!IS_ERR_OR_NULL(dc->out->bl_vdd))
+		regulator_disable(dc->out->bl_vdd);
+}
+
+void tegra_dc_panel_disable_common(struct tegra_dc *dc)
+{
+	if (!dc->out->panel_enabled)
+		return;
+
 	switch (dc->out->type) {
 		case TEGRA_DC_OUT_RGB:
-			if (!IS_ERR_OR_NULL(dc->out->bl_vdd))
-				regulator_disable(dc->out->bl_vdd);
 			if (!IS_ERR_OR_NULL(dc->out->lvds_vdd))
 				regulator_disable(dc->out->lvds_vdd);
 			if (!IS_ERR_OR_NULL(dc->out->pnl_vdd))
@@ -1403,9 +1423,10 @@ static int tegra_dc_panel_disable_common(struct tegra_dc *dc)
 			break;
 		default:
 			dev_err(&dc->ndev->dev, "wrong dc type\n");
+			return;
 	};
 
-	return 0;
+	dc->out->panel_enabled = false;
 }
 
 static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
@@ -1414,8 +1435,6 @@ static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 
 	if (dc->out->enable)
 		dc->out->enable();
-	else
-		tegra_dc_panel_enable_common(dc);
 
 	tegra_dc_setup_clk(dc, dc->clk);
 	tegra_dc_clk_enable(dc);
@@ -1433,15 +1452,11 @@ static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 		tegra_dc_clk_disable(dc);
 		if (dc->out && dc->out->disable)
 			dc->out->disable();
-		else
-			tegra_dc_panel_disable_common(dc);
 		return false;
 	}
 
 	if (dc->out_ops && dc->out_ops->enable)
 		dc->out_ops->enable(dc);
-	else
-		tegra_dc_panel_enable_common(dc);
 
 	/* force a full blending update */
 	dc->blend.z[0] = -1;
@@ -1466,8 +1481,6 @@ static bool _tegra_dc_controller_reset_enable(struct tegra_dc *dc)
 
 	if (dc->out->enable)
 		dc->out->enable();
-	else
-		tegra_dc_panel_enable_common(dc);
 
 	tegra_dc_setup_clk(dc, dc->clk);
 	tegra_dc_clk_enable(dc);
@@ -1500,11 +1513,6 @@ static bool _tegra_dc_controller_reset_enable(struct tegra_dc *dc)
 		dev_err(&dc->ndev->dev, "cannot initialize\n");
 		ret = false;
 	}
-
-	if (dc->out_ops && dc->out_ops->enable)
-		dc->out_ops->enable(dc);
-	else
-		tegra_dc_panel_enable_common(dc);
 
 	if (dc->out->postpoweron)
 		dc->out->postpoweron();
@@ -1589,8 +1597,6 @@ static void _tegra_dc_controller_disable(struct tegra_dc *dc)
 
 	if (dc->out_ops && dc->out_ops->disable)
 		dc->out_ops->disable(dc);
-	else
-		tegra_dc_panel_disable_common(dc);
 
 	tegra_dc_writel(dc, 0, DC_CMD_INT_MASK);
 	tegra_dc_writel(dc, 0, DC_CMD_INT_ENABLE);
@@ -1601,8 +1607,6 @@ static void _tegra_dc_controller_disable(struct tegra_dc *dc)
 
 	if (dc->out && dc->out->disable)
 		dc->out->disable();
-	else
-		tegra_dc_panel_disable_common(dc);
 
 	for (i = 0; i < dc->n_windows; i++) {
 		struct tegra_dc_win *w = &dc->windows[i];
@@ -2113,6 +2117,11 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	}
 	mutex_unlock(&dc->lock);
 
+	if (IS_ENABLED(CONFIG_ANDROID)) {
+		tegra_dc_panel_enable_common(dc);
+		tegra_enable_backlight(dc);
+	}
+
 	/* interrupt handler must be registered before tegra_fb_register() */
 	if (devm_request_irq(&ndev->dev, irq, tegra_dc_irq, 0,
 			dev_name(&ndev->dev), dc)) {
@@ -2143,13 +2152,13 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 		}
 
 		dc->fb = tegra_fb_register(ndev, dc, dc->pdata->fb, fb_mem);
-		if (IS_ERR_OR_NULL(dc->fb))
+		if (IS_ERR(dc->fb))
 			dc->fb = NULL;
 	}
 
 	if (dc->fb) {
 		dc->overlay = tegra_overlay_register(ndev, dc);
-		if (IS_ERR_OR_NULL(dc->overlay))
+		if (IS_ERR(dc->overlay))
 			dc->overlay = NULL;
 	}
 

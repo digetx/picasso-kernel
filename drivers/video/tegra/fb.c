@@ -30,6 +30,7 @@
 #include <linux/file.h>
 #include <linux/workqueue.h>
 #include <linux/memblock.h>
+#include <linux/delay.h>
 
 #include <asm/atomic.h>
 
@@ -281,24 +282,34 @@ static int tegra_fb_setcmap(struct fb_cmap *cmap, struct fb_info *info)
 static int tegra_fb_blank(int blank, struct fb_info *info)
 {
 	struct tegra_fb_info *tegra_fb = info->par;
+	struct tegra_dc *dc = tegra_fb->win->dc;
 
 	switch (blank) {
 	case FB_BLANK_UNBLANK:
 		dev_dbg(&tegra_fb->ndev->dev, "unblank\n");
 		tegra_fb->win->flags = TEGRA_WIN_FLAG_ENABLED;
-		tegra_dc_enable(tegra_fb->win->dc);
+		if (IS_ENABLED(CONFIG_ANDROID)) {
+			if (tegra_dc_panel_enable_common(dc))
+				msleep(dc->out->lvds_to_bl_timeout);
+			tegra_enable_backlight(dc);
+		} else
+			tegra_dc_enable(tegra_fb->win->dc);
 		return 0;
 
 	case FB_BLANK_NORMAL:
 		dev_dbg(&tegra_fb->ndev->dev, "blank - normal\n");
-		tegra_dc_blank(tegra_fb->win->dc);
+		tegra_dc_blank(dc);
 		return 0;
 
 	case FB_BLANK_VSYNC_SUSPEND:
 	case FB_BLANK_HSYNC_SUSPEND:
 	case FB_BLANK_POWERDOWN:
 		dev_dbg(&tegra_fb->ndev->dev, "blank - powerdown\n");
-		tegra_dc_disable(tegra_fb->win->dc);
+		if (IS_ENABLED(CONFIG_ANDROID)) {
+			tegra_disable_backlight(dc);
+			tegra_dc_panel_disable_common(dc);
+		} else
+			tegra_dc_disable(tegra_fb->win->dc);
 		return 0;
 
 	default:

@@ -380,6 +380,7 @@ struct tegra_dc_out {
 	struct regulator	*pnl_vdd;
 	struct regulator	*bl_vdd;
 	unsigned		lvds_to_bl_timeout;
+	bool			panel_enabled;
 
 	int	(*enable)(void);
 	int	(*postpoweron)(void);
@@ -544,6 +545,11 @@ void tegra_dc_blank(struct tegra_dc *dc);
 
 void tegra_dc_enable(struct tegra_dc *dc);
 void tegra_dc_disable(struct tegra_dc *dc);
+
+int tegra_dc_panel_enable_common(struct tegra_dc *dc);
+void tegra_dc_panel_disable_common(struct tegra_dc *dc);
+void tegra_enable_backlight(struct tegra_dc *dc);
+void tegra_disable_backlight(struct tegra_dc *dc);
 
 u32 tegra_dc_get_syncpt_id(const struct tegra_dc *dc, int i);
 u32 tegra_dc_incr_syncpt_max(struct tegra_dc *dc, int i);
