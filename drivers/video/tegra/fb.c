@@ -143,7 +143,7 @@ static int tegra_fb_set_par(struct fb_info *info)
 		bool stereo;
 		unsigned old_len = 0;
 		struct fb_videomode m;
-		struct fb_videomode *old_mode = NULL;
+		struct fb_videomode *old_mode;
 
 		fb_var_to_videomode(&m, var);
 
@@ -158,6 +158,9 @@ static int tegra_fb_set_par(struct fb_info *info)
 			info->mode = old_mode;
 			return -EINVAL;
 		}
+
+		if (old_mode == info->mode)
+			return 0;
 
 		/* Update fix line_length and window stride as per new mode */
 		info->fix.line_length = var->xres * var->bits_per_pixel / 8;
