@@ -177,6 +177,9 @@ static int tegra_ahb_resume(struct device *dev)
 		gizmo_writel(ahb, ahb->ctx[i], tegra_ahb_gizmo[i]);
 	return 0;
 }
+#else
+#define tegra_ahb_suspend	NULL
+#define tegra_ahb_resume	NULL
 #endif
 
 static UNIVERSAL_DEV_PM_OPS(tegra_ahb_pm,
