@@ -113,7 +113,9 @@ ENTRY(tegra20_cpu_shutdown)
 	beq	.
 	mov	pc, lr
 ENDPROC(tegra20_cpu_shutdown)
+#endif
 
+#ifdef CONFIG_PM_SLEEP
 /*
  * tegra20_sleep_core_finish(unsigned long v2p)
  *
