@@ -456,6 +456,7 @@ static int sdhci_tegra_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
 static int tegra_sdhci_suspend(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
@@ -485,6 +486,7 @@ static int tegra_sdhci_resume(struct device *dev)
 
 	return ret;
 }
+#endif
 
 static SIMPLE_DEV_PM_OPS(tegra_sdhci_pmops,
 			 tegra_sdhci_suspend, tegra_sdhci_resume);
