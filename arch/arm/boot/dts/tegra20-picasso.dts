@@ -89,7 +89,7 @@
 					order = <0>; /* TEGRA_DC_ORDER_RED_BLUE */
 					align = <0>; /* TEGRA_DC_ALIGN_MSB */
 					depth = <18>;
-					dither = <2>; /* TEGRA_DC_ORDERED_DITHER */
+					dither = <3>; /* TEGRA_DC_ERRDIFF_DITHER */
 
 					default-emc-rate = <600000000>;
 					min-emc-rate = <300000000>;
