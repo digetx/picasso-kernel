@@ -443,7 +443,7 @@ static int dvfs_core_change_notify(struct notifier_block *nb,
 			dev_dbg(dvfs_dev, "scheduled %s POST disable\n",
 				client->clk_name);
 
-			schedule_delayed_work(&client->work, HZ);
+			schedule_delayed_work(&client->work, HZ / 2);
 		} else {
 			mutex_lock(&dvfs_lock);
 
