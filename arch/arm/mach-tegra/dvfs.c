@@ -470,6 +470,7 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 
 	for (i = 0; dvfs->clients[i] != NULL; i++) {
 		struct dvfs_client *client = dvfs->clients[i];
+		unsigned long rate;
 		int ret;
 
 		client->clk = devm_clk_get(dvfs_dev, client->clk_name);
@@ -507,10 +508,11 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 
 		INIT_DELAYED_WORK(&client->work, deferred_disable);
 		INIT_LIST_HEAD(&client->node);
+	
+		rate = clk_get_rate(client->clk);
+		update_freq_index(client, rate);
 
 		if (__clk_get_enable_count(client->clk)) {
-			unsigned long rate = clk_get_rate(client->clk);
-
 			/*
 			 * cpu freqs are defined in MHz while rate is in Hz,
 			 * so convert rate to KHz
@@ -519,7 +521,6 @@ static void dvfs_init(struct dvfs_domain *dvfs)
 				rate /= 1000;
 
 			list_add(&client->node, &dvfs->active_clients);
-			update_freq_index(client, rate);
 
 			dev_dbg(dvfs_dev, "%s rate = %luHz index = %d\n",
 				client->clk_name, rate, client->index);
