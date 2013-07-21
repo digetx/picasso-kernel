@@ -477,7 +477,7 @@ static int nvhost_probe(struct nvhost_device *dev,
 		clk_prepare_enable(host->dev->clk[i]);
 	nvhost_syncpt_reset(&host->syncpt);
 	for (i = 0; i < host->dev->num_clks; i++)
-		clk_disable_unprepare(host->dev->clk[0]);
+		clk_disable_unprepare(host->dev->clk[i]);
 
 	nvhost_debug_init(host);
 
