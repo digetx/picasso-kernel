@@ -1640,38 +1640,41 @@ static void tegra20_clk_shared_user_init(struct clk_hw *hw)
 	struct clk_hw *bus_hw = __clk_get_hw(bus_clk);
 	struct clk_tegra *bus = to_clk_tegra(bus_hw);
 
+	c->u.shared_bus_user.rate = UINT_MAX;
 	list_add_tail(&c->u.shared_bus_user.node, &bus->shared_bus_list);
 }
 
 static long tegra20_clk_shared_bus_round_rate(struct clk_hw *hw,
 				unsigned long rate, unsigned long *prate)
 {
-	struct clk_tegra *c = to_clk_tegra(hw);
 	struct clk *bus_clk = __clk_get_parent(hw->clk);
 	struct clk_hw *bus_hw = __clk_get_hw(bus_clk);
 	struct clk_tegra *bus = to_clk_tegra(bus_hw);
 	struct clk_tegra *it;
-	unsigned long new_rate = 0;
-
-	c->u.shared_bus_user.rate = rate;
+	unsigned long new_prate = 0;
 
 	list_for_each_entry(it, &bus->shared_bus_list, u.shared_bus_user.node) {
 		if (it->u.shared_bus_user.enabled) {
-			pr_debug("%s %s: %lu\n", __func__,
-						 __clk_get_name(it->hw.clk),
-						 it->u.shared_bus_user.rate);
-			new_rate = max(it->u.shared_bus_user.rate, new_rate);
+			pr_debug("%s %s: %lu # %lu\n", __func__,
+				 __clk_get_name(it->hw.clk),
+				 it->u.shared_bus_user.rate, new_prate);
+			new_prate = max(it->u.shared_bus_user.rate, new_prate);
 		}
 	}
 
-	*prate = __clk_round_rate(bus_clk, new_rate);
+	if (new_prate)
+		*prate = new_prate;
 
-	return rate;
+	return __clk_round_rate(bus_clk, rate);
 }
 
 static int tegra20_clk_shared_user_set_rate(struct clk_hw *hw, unsigned long rate,
 		unsigned long parent_rate)
 {
+	struct clk_tegra *c = to_clk_tegra(hw);
+
+	c->u.shared_bus_user.rate = rate;
+
 	return 0;
 }
 
@@ -1686,18 +1689,10 @@ static unsigned long tegra20_clk_shared_user_recalc_rate(struct clk_hw *hw,
 static void tegra20_clk_shared_bus_update(struct clk_hw *hw, bool enabled)
 {
 	struct clk_tegra *c = to_clk_tegra(hw);
-	struct clk *bus_clk = __clk_get_parent(hw->clk);
-	unsigned long old_rate, new_rate;
 
 	c->u.shared_bus_user.enabled = enabled;
 
-	old_rate = __clk_get_rate(bus_clk);
-
-	tegra20_clk_shared_bus_round_rate(hw, c->u.shared_bus_user.rate,
-					  &new_rate);
-
-	if (new_rate != old_rate)
-		__clk_set_rate(bus_clk, new_rate);
+	__clk_set_rate(hw->clk, c->u.shared_bus_user.rate);
 }
 
 static int tegra20_clk_shared_user_prepare(struct clk_hw *hw)

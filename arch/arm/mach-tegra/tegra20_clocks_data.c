@@ -1062,8 +1062,7 @@ static const char *emc[] = {
 		.parent_names = _con,			\
 		.num_parents = 1,			\
 		.flags = CLK_SET_RATE_PARENT  |		\
-			 CLK_SET_RATE_NOCACHE |		\
-			 CLK_NO_CHILD_RECALC,		\
+			 CLK_SET_RATE_NOCACHE,		\
 	};
 
 SHARED_CLK(avp_emc,   "tegra-avp",    emc);
