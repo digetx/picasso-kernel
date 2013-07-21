@@ -1435,6 +1435,8 @@ static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 
 	if (dc->out->enable)
 		dc->out->enable();
+	if (tegra_dc_panel_enable_common(dc))
+			msleep(dc->out->lvds_to_bl_timeout);
 
 	tegra_dc_setup_clk(dc, dc->clk);
 	tegra_dc_clk_enable(dc);
@@ -1452,6 +1454,7 @@ static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 		tegra_dc_clk_disable(dc);
 		if (dc->out && dc->out->disable)
 			dc->out->disable();
+		tegra_dc_panel_disable_common(dc);
 		return false;
 	}
 
@@ -1579,6 +1582,8 @@ static bool _tegra_dc_enable(struct tegra_dc *dc)
 
 void tegra_dc_enable(struct tegra_dc *dc)
 {
+	cancel_delayed_work_sync(&dc->disable_work);
+
 	mutex_lock(&dc->lock);
 
 	if (!dc->enabled)
@@ -1607,6 +1612,7 @@ static void _tegra_dc_controller_disable(struct tegra_dc *dc)
 
 	if (dc->out && dc->out->disable)
 		dc->out->disable();
+	tegra_dc_panel_disable_common(dc);
 
 	for (i = 0; i < dc->n_windows; i++) {
 		struct tegra_dc_win *w = &dc->windows[i];
@@ -1721,6 +1727,14 @@ void tegra_dc_disable(struct tegra_dc *dc)
 
 	mutex_unlock(&dc->lock);
 	print_mode_info(dc, dc->mode);
+}
+
+static void tegra_dc_delayed_disable_work(struct work_struct *work)
+{
+	struct tegra_dc *dc =
+		container_of(work, struct tegra_dc, disable_work.work);
+
+	tegra_dc_disable(dc);
 }
 
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
@@ -2066,6 +2080,7 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	INIT_WORK(&dc->vblank_work, tegra_dc_vblank);
 	INIT_DELAYED_WORK(&dc->underflow_work, tegra_dc_underflow_worker);
 	INIT_DELAYED_WORK(&dc->one_shot_work, tegra_dc_one_shot_worker);
+	INIT_DELAYED_WORK(&dc->disable_work, tegra_dc_delayed_disable_work);
 
 	tegra_dc_init_lut_defaults(&dc->fb_lut);
 
@@ -2117,10 +2132,7 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	}
 	mutex_unlock(&dc->lock);
 
-	if (IS_ENABLED(CONFIG_ANDROID)) {
-		tegra_dc_panel_enable_common(dc);
-		tegra_enable_backlight(dc);
-	}
+	tegra_enable_backlight(dc);
 
 	/* interrupt handler must be registered before tegra_fb_register() */
 	if (devm_request_irq(&ndev->dev, irq, tegra_dc_irq, 0,
@@ -2214,6 +2226,8 @@ static int tegra_dc_suspend(struct nvhost_device *ndev, pm_message_t state)
 
 	trace_printk("%s:suspend\n", dc->ndev->name);
 	dev_info(&ndev->dev, "suspend\n");
+
+	flush_delayed_work(&dc->disable_work);
 
 	if (dc->overlay)
 		tegra_overlay_disable(dc->overlay);

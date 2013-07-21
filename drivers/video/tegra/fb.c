@@ -291,12 +291,8 @@ static int tegra_fb_blank(int blank, struct fb_info *info)
 	case FB_BLANK_UNBLANK:
 		dev_dbg(&tegra_fb->ndev->dev, "unblank\n");
 		tegra_fb->win->flags = TEGRA_WIN_FLAG_ENABLED;
-		if (IS_ENABLED(CONFIG_ANDROID)) {
-			if (tegra_dc_panel_enable_common(dc))
-				msleep(dc->out->lvds_to_bl_timeout);
-			tegra_enable_backlight(dc);
-		} else
-			tegra_dc_enable(tegra_fb->win->dc);
+		tegra_dc_enable(dc);
+		tegra_enable_backlight(dc);
 		return 0;
 
 	case FB_BLANK_NORMAL:
@@ -308,11 +304,8 @@ static int tegra_fb_blank(int blank, struct fb_info *info)
 	case FB_BLANK_HSYNC_SUSPEND:
 	case FB_BLANK_POWERDOWN:
 		dev_dbg(&tegra_fb->ndev->dev, "blank - powerdown\n");
-		if (IS_ENABLED(CONFIG_ANDROID)) {
-			tegra_disable_backlight(dc);
-			tegra_dc_panel_disable_common(dc);
-		} else
-			tegra_dc_disable(tegra_fb->win->dc);
+		tegra_disable_backlight(dc);
+		schedule_delayed_work(&dc->disable_work, 5 * HZ);
 		return 0;
 
 	default:

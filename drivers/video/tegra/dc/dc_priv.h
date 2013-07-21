@@ -162,6 +162,8 @@ struct tegra_dc {
 	u32				one_shot_delay_ms;
 	struct delayed_work		one_shot_work;
 	s64				frame_end_timestamp;
+	
+	struct delayed_work		disable_work;
 };
 
 #define print_mode_info(dc, mode) do {					\
