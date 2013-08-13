@@ -362,6 +362,12 @@ config BATTERY_GOLDFISH
 	  Say Y to enable support for the battery and AC power in the
 	  Goldfish emulator.
 
+config EC_BATTERY
+	tristate "Acer a50x battery charger driver"
+	depends on MFD_EC_CONTROL
+	help
+	  Say Y to include support for battery behind EC.
+
 source "drivers/power/reset/Kconfig"
 
 endif # POWER_SUPPLY
