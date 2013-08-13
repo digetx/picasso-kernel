@@ -58,7 +58,7 @@ static struct ec_info {
 	int				power_state_gps;
 	struct delayed_work		lsc_work;
 	struct notifier_block		panic_notifier;
-	void (*arm_reboot) (char mode, const char *cmd);
+	void (*arm_reboot) (enum reboot_mode reboot_mode, const char *cmd);
 } *ec_chip;
 
 void inline ec_lock(void)
@@ -708,7 +708,7 @@ static int panic_event(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 
-static void ec_reboot(char mode, const char *cmd)
+static void ec_reboot(enum reboot_mode mode, const char *cmd)
 {
 	dev_info(&ec_chip->client->dev, "reboot ...\n");
 
