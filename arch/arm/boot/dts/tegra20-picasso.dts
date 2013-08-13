@@ -431,6 +431,24 @@
 			reg = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+
+			ec-control@58 {
+				compatible = "ec,ec-control";
+				reg = <0x58>;
+				ec,i2c-retry-count = <5>;
+				ec,lsc-start-delay = <25000>;
+				system-power-controller;
+				leds-reset;
+
+				battery {
+					compatible = "ec,ec-battery";
+					power-supplies = <&gpio_charger>;
+				};
+
+				leds {
+					compatible = "ec,ec-leds";
+				};
+			};
 		};
 	};
 
@@ -746,6 +764,12 @@
 	serial@70006300 {
 		compatible = "nvidia,tegra20-hsuart";
 		status = "okay";
+	};
+
+	gpio_charger: charger {
+		compatible = "gpio-charger";
+		charger-type = <3>;
+		gpio = <&gpio TEGRA_GPIO(V, 3) GPIO_ACTIVE_LOW>;
 	};
 
 	memory-controller@7000f400 {
