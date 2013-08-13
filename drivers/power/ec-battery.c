@@ -322,7 +322,8 @@ static void ec_delayed_work(struct work_struct *work)
 
 	/* send continuous uevent notify to android */
 	set_timer_slack(&chip->work.timer, chip->poll_interval * HZ / 4);
-	schedule_delayed_work(&chip->work, chip->poll_interval * HZ);
+	queue_delayed_work(system_power_efficient_wq, &chip->work,
+			   chip->poll_interval * HZ);
 }
 
 static int ec_probe(struct platform_device *pdev)
@@ -391,7 +392,7 @@ static int ec_resume(struct device *dev)
 	struct ec_battery_info *chip = dev_get_drvdata(dev);
 
 	chip->poll_disabled = false;
-	schedule_delayed_work(&chip->work, HZ);
+	queue_delayed_work(system_power_efficient_wq, &chip->work, HZ);
 
 	return 0;
 }
