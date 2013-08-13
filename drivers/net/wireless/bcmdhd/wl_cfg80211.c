@@ -8231,12 +8231,15 @@ wl_cfg80211_netdev_notifier_call(struct notifier_block * nb,
 	struct net_device *dev = ndev;
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct wl_priv *wl = wlcfg_drv_priv;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 1))
 	int refcnt = 0;
+#endif
 
 	WL_DBG(("Enter \n"));
 	if (!wdev || !wl || dev == wl_to_prmry_ndev(wl))
 		return NOTIFY_DONE;
 	switch (state) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 1))
 		case NETDEV_DOWN:
 			while (work_pending(&wdev->cleanup_work) && refcnt < 100) {
 				if (refcnt%5 == 0)
@@ -8247,6 +8250,7 @@ wl_cfg80211_netdev_notifier_call(struct notifier_block * nb,
 				refcnt++;
 			}
 			break;
+#endif
 
 		case NETDEV_UNREGISTER:
 			/* after calling list_del_rcu(&wdev->list) */
