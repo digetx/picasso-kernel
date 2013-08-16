@@ -35,6 +35,7 @@
 #include <linux/sys_soc.h>
 #include <linux/usb/tegra_usb_phy.h>
 #include <linux/clk/tegra.h>
+#include <linux/nvhost.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -77,6 +78,7 @@ static struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 		       &tegra_ehci2_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-ehci", 0xC5008000, "tegra-ehci.2",
 		       &tegra_ehci3_pdata),
+	NVHOST_T20_OF_DEV_AUXDATA,
 	{}
 };
 

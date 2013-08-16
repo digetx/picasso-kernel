@@ -648,6 +648,8 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 				      const struct mem_type *type)
 {
 	pmd_t *pmd = pmd_offset(pud, addr);
+	unsigned long pages_2m = 0, pages_4k = 0;
+	unsigned long stash_phys = phys;
 	unsigned long next;
 
 	do {
@@ -664,14 +666,21 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 		if (type->prot_sect &&
 				((addr | next | phys) & ~SECTION_MASK) == 0) {
 			__map_init_section(pmd, addr, next, phys, type);
+			pages_2m += (end - addr) >> (PGDIR_SHIFT);
 		} else {
 			alloc_init_pte(pmd, addr, next,
 						__phys_to_pfn(phys), type);
+ 			pages_4k += (end - addr) >> PAGE_SHIFT;
 		}
 
 		phys += next - addr;
 
 	} while (pmd++, addr = next, addr != end);
+
+	if ((stash_phys >= PHYS_OFFSET) && (stash_phys < arm_lowmem_limit)) {
+		update_page_count(PG_LEVEL_2M, pages_2m);
+		update_page_count(PG_LEVEL_4K, pages_4k);
+	}
 }
 
 static void __init alloc_init_pud(pgd_t *pgd, unsigned long addr,
@@ -985,7 +994,7 @@ static int __init early_vmalloc(char *arg)
 }
 early_param("vmalloc", early_vmalloc);
 
-phys_addr_t arm_lowmem_limit __initdata = 0;
+phys_addr_t arm_lowmem_limit = 0;
 
 void __init sanity_check_meminfo(void)
 {
