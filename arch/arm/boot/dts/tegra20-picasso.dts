@@ -1,5 +1,14 @@
 /dts-v1/;
 
+/*
+ * Carveouts for multimedia and ram console
+ * 256MB - multimedia
+ * 9MB - fb1
+ * 16MB - fb2
+ * 1MB - console
+ */
+/memreserve/ 0x2E600000 0x11A00000;
+
 #include "tegra20.dtsi"
 
 / {
@@ -10,7 +19,57 @@
 		reg = <0x00000000 0x40000000>;
 	};
 
+	nvmap {
+		compatible = "nvidia,tegra-nvmap";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		carveouts {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			iram {
+				reg = <0x40000400 0x3FC00>;
+				reg-names = "iram";
+				buddy-size = <0>;
+				usage-mask = <0x20000000>;
+			};
+
+			generic {
+				reg = <0x2E600000 0x10000000>;
+				reg-names = "generic-0";
+				buddy-size = <0x8000>;
+				usage-mask = <0x1>;
+			};
+		};
+	};
+
 	host1x {
+		compatible = "nvidia,tegra20-host1x", "nvhost-bus";
+		clock-names = "host1x";
+		ranges;
+
+		mpe {
+			clocks = <&tegra_car TEGRA20_CLK_MPE>,
+				 <&tegra_car TEGRA20_CLK_EMC>;
+			clock-names = "mpe", "emc";
+		};
+
+		gr2d {
+			clocks = <&tegra_car TEGRA20_CLK_GR2D>,
+				 <&tegra_car TEGRA20_CLK_EPP>,
+				 <&tegra_car TEGRA20_CLK_EMC>;
+			clock-names = "gr2d", "epp", "emc";
+		};
+
+		gr3d {
+			clocks = <&tegra_car TEGRA20_CLK_GR3D>,
+				 <&tegra_car TEGRA20_CLK_EMC>;
+			clock-names = "gr3d", "emc";
+		};
+
 		hdmi {
 			status = "okay";
 
@@ -20,6 +79,88 @@
 			nvidia,ddc-i2c-bus = <&hdmi_ddc>;
 			nvidia,hpd-gpio = <&gpio TEGRA_GPIO(N, 7)
 				GPIO_ACTIVE_HIGH>;
+		};
+
+		dc@54200000 {
+			reg = <0x54200000 0x00040000>,
+			      <0x3E600000 0x00900000>;
+			reg-names = "regs", "fbmem";
+			interrupt-names = "irq";
+
+			lvds-vdd-supply = <&lvds_bl_reg>;
+			pnl-vdd-supply = <&vdd_pnl_reg>;
+			bl-vdd-supply = <&vdd_bl_reg>;
+
+			rgb {
+				status = "okay";
+
+				display {
+					fb-win = <0>;
+					fb-xres = <1280>;
+					fb-yres = <800>;
+					fb-bpp = <32>;
+
+					lvds-to-bl = <330>;
+
+					dc-index = <0>;
+
+					flags = <1>; /* TEGRA_DC_FLAG_ENABLED */
+
+					type = <0>; /* TEGRA_DC_OUT_RGB */
+					order = <0>; /* TEGRA_DC_ORDER_RED_BLUE */
+					align = <0>; /* TEGRA_DC_ALIGN_MSB */
+					depth = <18>;
+					dither = <3>; /* TEGRA_DC_ERRDIFF_DITHER */
+
+					default-emc-rate = <600000000>;
+					min-emc-rate = <300000000>;
+
+					display-timings {
+						native-mode = <&timing0>;
+						timing0: 1280x800 {
+							clock-frequency = <70500000>;
+							hactive = <1280>;
+							vactive = <800>;
+							hfront-porch = <58>;
+							hback-porch = <4>;
+							hsync-len = <58>;
+							vsync-len = <4>;
+							vfront-porch = <58>;
+							vback-porch = <4>;
+						};
+					};
+				};
+			};
+		};
+
+		dc@54240000 {
+			reg = <0x54240000 0x00040000>,
+			      <0x54280000 0x00040000>,
+			      <0x3EF00000 0x01000000>;
+			reg-names = "regs", "hdmi_regs", "fbmem";
+			interrupt-names = "irq";
+
+			hdmi-vdd-supply = <&hdmi_vdd_reg>;
+			hdmi-pll-supply = <&hdmi_pll_reg>;
+
+			rgb {
+				status = "okay";
+
+				display {
+					fb-win = <0>;
+					fb-xres = <1280>;
+					fb-yres = <800>;
+					fb-bpp = <32>;
+
+					dc-index = <1>;
+
+					type = <1>; /* TEGRA_DC_OUT_HDMI */
+					order = <0>; /* TEGRA_DC_ORDER_RED_BLUE */
+					align = <0>; /* TEGRA_DC_ALIGN_MSB */
+					dc-flags = <0>; /* TEGRA_DC_OUT_HOTPLUG_HIGH */
+					max-clock = <148500>;
+				};
+			};
 		};
 	};
 
@@ -484,7 +625,7 @@
 			regulator-always-on;
 		};
 
-		regulator@1 {
+		vdd_pnl_reg: regulator@1 {
 			compatible = "regulator-fixed";
 			reg = <1>;
 			regulator-name = "vdd_pnl";
@@ -492,9 +633,10 @@
 			regulator-max-microvolt = <2800000>;
 			gpio = <&gpio TEGRA_GPIO(C, 6) GPIO_ACTIVE_HIGH>;
 			enable-active-high;
+			regulator-boot-on;
 		};
 
-		regulator@2 {
+		vdd_bl_reg: regulator@2 {
 			compatible = "regulator-fixed";
 			reg = <2>;
 			regulator-name = "vdd_bl";
@@ -502,6 +644,18 @@
 			regulator-max-microvolt = <2800000>;
 			gpio = <&gpio TEGRA_GPIO(D, 4) GPIO_ACTIVE_HIGH>;
 			enable-active-high;
+			regulator-boot-on;
+		};
+
+		lvds_bl_reg: regulator@3 {
+			compatible = "regulator-fixed";
+			reg = <3>;
+			regulator-name = "vdd_lvds";
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			gpio = <&gpio TEGRA_GPIO(B, 2) GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+			regulator-boot-on;
 		};
 	};
 
