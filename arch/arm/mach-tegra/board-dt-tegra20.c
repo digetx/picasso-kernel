@@ -135,7 +135,7 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 		       &tegra_uartd_pdata),
 	OF_DEV_AUXDATA("nvidia,tegra20-avp", 0, "tegra-avp", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-camera", 0, "tegra_camera", NULL),
-	OF_DEV_AUXDATA("wireless,bcmdhd", 0, "bcmdhd_wlan", &picasso_wifi_control),
+	OF_DEV_AUXDATA("android,bcmdhd_wlan", 0, "bcmdhd_wlan", &picasso_wifi_control),
 	OF_DEV_AUXDATA("nvidia,tegra20-aes", 0x6001a000, "tegra-aes", NULL),
 	OF_DEV_AUXDATA("pwm-backlight", 0, "pwm-backlight", NULL),
 	OF_DEV_AUXDATA("tegra20-dvfs", 0, "tegra-dvfs", NULL),

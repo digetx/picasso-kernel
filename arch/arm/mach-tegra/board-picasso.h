@@ -23,7 +23,6 @@
 #define PICASSO_BCM_VDD			TEGRA_GPIO_PD1
 #define PICASSO_WLAN_PWR		TEGRA_GPIO_PK5
 #define PICASSO_WLAN_RST		TEGRA_GPIO_PK6
-#define PICASSO_WLAN_IRQ		TEGRA_GPIO_PS0
 
 void change_power_brcm_4329(bool enable);
 

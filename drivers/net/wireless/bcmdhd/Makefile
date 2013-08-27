@@ -16,10 +16,11 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DBCMDRIVER                     \
 	-DSET_RANDOM_MAC_SOFTAP -DCSCAN -DMAX_HDR_READ=64 -DDHD_SDALIGN=64    \
 	-DDHD_USE_IDLECOUNT -DSET_RANDOM_MAC_SOFTAP -DROAM_ENABLE -DVSDB      \
 	-DWL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST -DSDIO_CRC_ERROR_FIX       \
-	-DESCAN_RESULT_PATCH -DHT40_GO -DRXFRAME_THREAD                       \
+	-DESCAN_RESULT_PATCH -DRXFRAME_THREAD                       \
 	-DDHD_DONOT_FORWARD_BCMEVENT_AS_NETWORK_PKT -DBCM4330_CHIP -DWLTDLS   \
 	-DMIRACAST_AMPDU_SIZE=8                                               \
-	-Idrivers/net/wireless/bcmdhd -Idrivers/net/wireless/bcmdhd/include
+	-Idrivers/net/wireless/bcmdhd -Idrivers/net/wireless/bcmdhd/include   \
+	-Idrivers/net/wireless/bcmdhd/common/include
 
 DHDOFILES = aiutils.o bcmsdh_sdmmc_linux.o dhd_linux.o siutils.o bcmutils.o   \
 	dhd_linux_sched.o dhd_sdio.o bcmwifi_channels.o bcmevent.o hndpmu.o   \

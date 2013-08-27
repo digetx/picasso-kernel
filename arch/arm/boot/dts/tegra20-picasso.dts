@@ -849,10 +849,8 @@
 	};
 
 	wifi {
-		compatible = "wireless,bcmdhd";
-		interrupt-parent = <&gpio>;
-		interrupts = <144 0x04>; /* gpio PS0 */
-		interrupt-names = "bcmdhd_wlan_irq";
+		compatible = "android,bcmdhd_wlan";
+		gpios = <&gpio 144 0>; /* gpio PS0 */
 	};
 
 	usb-otg@c5000000 {

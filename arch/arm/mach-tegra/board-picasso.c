@@ -112,9 +112,6 @@ static int picasso_wifi_power(int on)
 	pr_debug("%s: %d\n", __func__, on);
 
 	if (!wifi_gpios_requested) {
-		gpio_request(PICASSO_WLAN_IRQ,"oob irq");
-		gpio_direction_input(PICASSO_WLAN_IRQ);
-
 		gpio_request(PICASSO_WLAN_RST, "wlan_rst");
 		gpio_direction_output(PICASSO_WLAN_RST, 0);
 
