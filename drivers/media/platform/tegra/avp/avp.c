@@ -967,9 +967,9 @@ static int avp_init(struct tegra_avp_info *avp)
 	char fw_file[30];
 
 	avp->nvmap_libs = nvmap_create_client(nvmap_dev, "avp_libs");
-	if (IS_ERR_OR_NULL(avp->nvmap_libs)) {
+	if (!avp->nvmap_libs) {
 		pr_err("%s: cannot create libs nvmap client\n", __func__);
-		ret = PTR_ERR(avp->nvmap_libs);
+		ret = -ENOMEM;
 		goto err_nvmap_create_libs_client;
 	}
 
@@ -1160,7 +1160,7 @@ static int _load_lib(struct tegra_avp_info *avp, struct tegra_avp_lib *lib,
 
 	lib_handle = nvmap_alloc(avp->nvmap_libs, fw->size, L1_CACHE_BYTES,
 				 NVMAP_HANDLE_UNCACHEABLE, 0);
-	if (IS_ERR_OR_NULL(lib_handle)) {
+	if (IS_ERR(lib_handle)) {
 		pr_err("avp_lib: can't nvmap alloc for lib '%s'\n", lib->name);
 		ret = PTR_ERR(lib_handle);
 		goto err_nvmap_alloc;
@@ -1596,9 +1596,9 @@ static int tegra_avp_probe(struct platform_device *pdev)
 	}
 
 	avp->nvmap_drv = nvmap_create_client(nvmap_dev, "avp_core");
-	if (IS_ERR_OR_NULL(avp->nvmap_drv)) {
+	if (!avp->nvmap_drv) {
 		pr_err("%s: cannot create drv nvmap client\n", __func__);
-		ret = PTR_ERR(avp->nvmap_drv);
+		ret = -ENODEV;
 		goto err_nvmap_create_drv_client;
 	}
 
@@ -1620,10 +1620,10 @@ static int tegra_avp_probe(struct platform_device *pdev)
 						SZ_1M, L1_CACHE_BYTES,
 						NVMAP_HANDLE_WRITE_COMBINE,
 						iovmm_addr[i]);
-			if (!IS_ERR_OR_NULL(avp->kernel_handle))
+			if (!IS_ERR(avp->kernel_handle))
 				break;
 		}
-		if (IS_ERR_OR_NULL(avp->kernel_handle)) {
+		if (IS_ERR(avp->kernel_handle)) {
 			pr_err("%s: cannot create handle\n", __func__);
 			ret = PTR_ERR(avp->kernel_handle);
 			goto err_nvmap_alloc;
@@ -1651,7 +1651,7 @@ static int tegra_avp_probe(struct platform_device *pdev)
 	if (heap_mask == NVMAP_HEAP_CARVEOUT_GENERIC) {
 		avp->kernel_handle = nvmap_alloc(avp->nvmap_drv, SZ_1M, SZ_1M,
 						NVMAP_HANDLE_UNCACHEABLE, 0);
-		if (IS_ERR_OR_NULL(avp->kernel_handle)) {
+		if (IS_ERR(avp->kernel_handle)) {
 			pr_err("%s: cannot create handle\n", __func__);
 			ret = PTR_ERR(avp->kernel_handle);
 			goto err_nvmap_alloc;
@@ -1682,7 +1682,7 @@ static int tegra_avp_probe(struct platform_device *pdev)
 	avp->iram_backup_handle =
 		nvmap_alloc(avp->nvmap_drv, TEGRA_IRAM_SIZE + 4,
 				L1_CACHE_BYTES, NVMAP_HANDLE_UNCACHEABLE, 0);
-	if (IS_ERR_OR_NULL(avp->iram_backup_handle)) {
+	if (IS_ERR(avp->iram_backup_handle)) {
 		pr_err("%s: cannot create handle for iram backup\n", __func__);
 		ret = PTR_ERR(avp->iram_backup_handle);
 		goto err_iram_nvmap_alloc;
@@ -1721,7 +1721,7 @@ static int tegra_avp_probe(struct platform_device *pdev)
 	}
 
 	avp->cop_clk = clk_get(&pdev->dev, "cop");
-	if (IS_ERR_OR_NULL(avp->cop_clk)) {
+	if (IS_ERR(avp->cop_clk)) {
 		pr_err("%s: Couldn't get cop clock\n", TEGRA_AVP_NAME);
 		ret = -ENOENT;
 		goto err_get_cop_clk;
@@ -1751,7 +1751,7 @@ static int tegra_avp_probe(struct platform_device *pdev)
 	avp->rpc_node = &avp_trpc_node;
 
 	avp->avp_svc = avp_svc_init(pdev, avp->rpc_node);
-	if (IS_ERR_OR_NULL(avp->avp_svc)) {
+	if (IS_ERR(avp->avp_svc)) {
 		pr_err("%s: Cannot initialize avp_svc\n", __func__);
 		ret = PTR_ERR(avp->avp_svc);
 		goto err_avp_svc_init;
