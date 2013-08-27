@@ -102,7 +102,7 @@ void tegra_dc_setup_clk(struct tegra_dc *dc, struct clk *clk)
 		 * as out0 is 1/2 of the actual PLL output.
 		 */
 
-		rate = dc->mode.pclk * 4;
+		rate = clk_round_rate(base_clk, dc->mode.pclk * 4);
 		if (rate != clk_get_rate(base_clk))
 			clk_set_rate(base_clk, rate);
 
