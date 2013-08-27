@@ -433,7 +433,7 @@ static int tegra_camera_clk_get(struct platform_device *pdev, const char *name,
 				struct clk **clk)
 {
 	*clk = devm_clk_get(&pdev->dev, name);
-	if (IS_ERR_OR_NULL(*clk)) {
+	if (IS_ERR(*clk)) {
 		dev_err(&pdev->dev, "%s: unable to get clock for %s\n",
 			__func__, name);
 		return -ENOMEM;
@@ -472,7 +472,7 @@ static int tegra_camera_probe(struct platform_device *pdev)
 	/* Get regulator pointer */
 	dev->reg = devm_regulator_get(&pdev->dev, "vcsi");
 
-	if (IS_ERR_OR_NULL(dev->reg)) {
+	if (IS_ERR(dev->reg)) {
 		dev_err(&pdev->dev, "%s: couldn't get regulator\n", __func__);
 		return PTR_ERR(dev->reg);
 	}
