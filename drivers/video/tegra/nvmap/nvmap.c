@@ -797,7 +797,7 @@ struct nvmap_handle_ref *nvmap_alloc_iovm(struct nvmap_client *client,
 	if (size <= PAGE_SIZE)
 		size = PAGE_SIZE << 1;
 	r = nvmap_create_handle(client, size);
-	if (IS_ERR_OR_NULL(r))
+	if (IS_ERR(r))
 		return r;
 
 	h = r->handle;

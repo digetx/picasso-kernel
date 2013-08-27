@@ -292,8 +292,10 @@ static int nvhost_module_update_rate(struct nvhost_device *dev, int index)
 {
 	unsigned long rate = 0;
 	struct nvhost_module_client *m;
+	struct clk *c;
 
-	if (!dev->clk[index])
+	c = dev->clk[index];
+	if (IS_ERR_OR_NULL(c))
 		return -EINVAL;
 
 	list_for_each_entry(m, &dev->client_list, node) {
@@ -484,7 +486,7 @@ int nvhost_module_init(struct nvhost_device *dev)
 
 		snprintf(devname, MAX_DEVID_LENGTH, "tegra_%s", dev->name);
 		c = clk_get_sys(devname, dev->clocks[i].name);
-		if (IS_ERR_OR_NULL(c)) {
+		if (IS_ERR(c)) {
 			dev_err(&dev->dev, "Cannot get clock %s\n",
 					dev->clocks[i].name);
 			i++;

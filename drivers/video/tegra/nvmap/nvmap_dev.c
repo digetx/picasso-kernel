@@ -1253,7 +1253,7 @@ static int nvmap_probe(struct platform_device *pdev)
 			&(dev->dev_user));
 #if defined(CONFIG_TEGRA_IOVMM) || defined(CONFIG_IOMMU_API)
 	if (!dev->iovmm_master.iovmm) {
-		e = PTR_ERR(dev->iovmm_master.iovmm);
+		e = -ENOMEM;
 		dev_err(&pdev->dev, "couldn't create iovmm client\n");
 		goto fail;
 	}

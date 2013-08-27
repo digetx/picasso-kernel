@@ -1588,21 +1588,21 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 	}
 
 	clk = clk_get(&dc->ndev->dev, "hdmi");
-	if (IS_ERR_OR_NULL(clk)) {
+	if (IS_ERR(clk)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't get clock\n");
 		err = -ENOENT;
 		goto err_iounmap_reg;
 	}
 
 	disp1_clk = clk_get_sys("tegradc.0", NULL);
-	if (IS_ERR_OR_NULL(disp1_clk)) {
+	if (IS_ERR(disp1_clk)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't disp1 clock\n");
 		err = -ENOENT;
 		goto err_put_clock;
 	}
 
 	disp2_clk = clk_get_sys("tegradc.1", NULL);
-	if (IS_ERR_OR_NULL(disp2_clk)) {
+	if (IS_ERR(disp2_clk)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't disp2 clock\n");
 		err = -ENOENT;
 		goto err_put_clock;
@@ -1610,21 +1610,21 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 
 #if !defined(CONFIG_ARCH_TEGRA_2x_SOC)
 	hdmi->hda_clk = clk_get_sys("tegra30-hda", "hda");
-	if (IS_ERR_OR_NULL(hdmi->hda_clk)) {
+	if (IS_ERR(hdmi->hda_clk)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't get hda clock\n");
 		err = -ENOENT;
 		goto err_put_clock;
 	}
 
 	hdmi->hda2codec_clk = clk_get_sys("tegra30-hda", "hda2codec");
-	if (IS_ERR_OR_NULL(hdmi->hda2codec_clk)) {
+	if (IS_ERR(hdmi->hda2codec_clk)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't get hda2codec clock\n");
 		err = -ENOENT;
 		goto err_put_clock;
 	}
 
 	hdmi->hda2hdmi_clk = clk_get_sys("tegra30-hda", "hda2hdmi");
-	if (IS_ERR_OR_NULL(hdmi->hda2hdmi_clk)) {
+	if (IS_ERR(hdmi->hda2hdmi_clk)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't get hda2hdmi clock\n");
 		err = -ENOENT;
 		goto err_put_clock;
@@ -1642,7 +1642,7 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 	}
 
 	hdmi->edid = tegra_edid_create(dc->out->dcc_bus);
-	if (IS_ERR_OR_NULL(hdmi->edid)) {
+	if (IS_ERR(hdmi->edid)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't create edid\n");
 		err = PTR_ERR(hdmi->edid);
 		goto err_free_irq;
@@ -1651,7 +1651,7 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 #ifdef CONFIG_TEGRA_NVHDCP
 	hdmi->nvhdcp = tegra_nvhdcp_create(hdmi, dc->ndev->id,
 			dc->out->dcc_bus);
-	if (IS_ERR_OR_NULL(hdmi->nvhdcp)) {
+	if (IS_ERR(hdmi->nvhdcp)) {
 		dev_err(&dc->ndev->dev, "hdmi: can't create nvhdcp\n");
 		err = PTR_ERR(hdmi->nvhdcp);
 		goto err_edid_destroy;
@@ -1710,18 +1710,18 @@ err_free_irq:
 	free_irq(gpio_to_irq(dc->out->hotplug_gpio), dc);
 err_put_clock:
 #if !defined(CONFIG_ARCH_TEGRA_2x_SOC)
-	if (!IS_ERR_OR_NULL(hdmi->hda2hdmi_clk))
+	if (!IS_ERR(hdmi->hda2hdmi_clk))
 		clk_put(hdmi->hda2hdmi_clk);
-	if (!IS_ERR_OR_NULL(hdmi->hda2codec_clk))
+	if (!IS_ERR(hdmi->hda2codec_clk))
 		clk_put(hdmi->hda2codec_clk);
-	if (!IS_ERR_OR_NULL(hdmi->hda_clk))
+	if (!IS_ERR(hdmi->hda_clk))
 		clk_put(hdmi->hda_clk);
 #endif
-	if (!IS_ERR_OR_NULL(disp2_clk))
+	if (!IS_ERR(disp2_clk))
 		clk_put(disp2_clk);
-	if (!IS_ERR_OR_NULL(disp1_clk))
+	if (!IS_ERR(disp1_clk))
 		clk_put(disp1_clk);
-	if (!IS_ERR_OR_NULL(clk))
+	if (!IS_ERR(clk))
 		clk_put(clk);
 err_iounmap_reg:
 	iounmap(base);

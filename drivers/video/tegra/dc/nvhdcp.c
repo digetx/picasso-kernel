@@ -360,7 +360,7 @@ static int get_ksvfifo(struct tegra_nvhdcp *nvhdcp,
 		return 0;
 
 	buf = kmalloc(buf_len, GFP_KERNEL);
-	if (IS_ERR_OR_NULL(buf))
+	if (!buf)
 		return -ENOMEM;
 
 	e = nvhdcp_i2c_read(nvhdcp, 0x43, buf_len, buf);

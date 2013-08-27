@@ -2045,13 +2045,13 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	}
 
 	clk = devm_clk_get(&ndev->dev, NULL);
-	if (IS_ERR_OR_NULL(clk)) {
+	if (IS_ERR(clk)) {
 		dev_err(&ndev->dev, "can't get clock\n");
 		return -ENOENT;
 	}
 
 	emc_clk = devm_clk_get(&ndev->dev, "emc");
-	if (IS_ERR_OR_NULL(emc_clk)) {
+	if (IS_ERR(emc_clk)) {
 		dev_err(&ndev->dev, "can't get emc clock\n");
 		return -ENOENT;
 	}

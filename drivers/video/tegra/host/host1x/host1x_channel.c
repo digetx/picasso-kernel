@@ -590,8 +590,8 @@ static int host1x_save_context(struct nvhost_channel *ch)
 	job = nvhost_job_alloc(ch, hwctx_to_save,
 			NULL,
 			nvhost_get_host(ch->dev)->memmgr, 0, 0);
-	if (IS_ERR_OR_NULL(job)) {
-		err = PTR_ERR(job);
+	if (!job) {
+		err = -ENOMEM;
 		mutex_unlock(&ch->submitlock);
 		goto done;
 	}
