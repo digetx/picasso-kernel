@@ -1008,6 +1008,10 @@ static void tegra_dc_underflow_handler(struct tegra_dc *dc)
 	/* Check for any underflow reset conditions */
 	for (i = 0; i < DC_N_WINDOWS; i++) {
 		if (dc->underflow_mask & (WIN_A_UF_INT << i)) {
+			if (dc->windows[i].out_w < UNDERFLOW_IGNORE_W &&
+			    dc->windows[i].out_h < UNDERFLOW_IGNORE_H)
+				continue;
+
 			dc->windows[i].underflows++;
 
 			mdelay(30);

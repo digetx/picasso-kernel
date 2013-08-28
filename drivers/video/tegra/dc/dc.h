@@ -433,6 +433,9 @@ struct tegra_dc_lut {
 	u8 b[256];
 };
 
+#define UNDERFLOW_IGNORE_W	400
+#define UNDERFLOW_IGNORE_H	400
+
 struct tegra_dc_win {
 	u8			idx;
 	u8			fmt;
