@@ -1096,6 +1096,7 @@
 	rotation-lock {
 		compatible = "rotation-lock-switch";
 		gpio = <&gpio 130 0>; /* gpio PQ2 */
+		debounce-interval = <500>;
 	};
 
 	dvfs {
