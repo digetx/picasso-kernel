@@ -1712,10 +1712,6 @@ void tegra_dc_disable(struct tegra_dc *dc)
 
 	tegra_dc_ext_disable(dc->ext);
 
-	/* it's important that new underflow work isn't scheduled before the
-	 * lock is acquired. */
-	cancel_delayed_work_sync(&dc->underflow_work);
-
 	mutex_lock(&dc->lock);
 
 	if (dc->enabled) {
@@ -1797,21 +1793,6 @@ unlock:
 	trace_printk("%s:reset complete\n", dc->ndev->name);
 }
 #endif
-
-static void tegra_dc_underflow_worker(struct work_struct *work)
-{
-	struct tegra_dc *dc = container_of(
-		to_delayed_work(work), struct tegra_dc, underflow_work);
-
-	mutex_lock(&dc->lock);
-	tegra_dc_hold_dc_out(dc);
-
-	if (dc->enabled) {
-		tegra_dc_underflow_handler(dc);
-	}
-	tegra_dc_release_dc_out(dc);
-	mutex_unlock(&dc->lock);
-}
 
 #ifdef CONFIG_SWITCH
 static ssize_t switch_modeset_print_mode(struct switch_dev *sdev, char *buf)
@@ -2082,7 +2063,6 @@ static int tegra_dc_probe(struct nvhost_device *ndev,
 	INIT_WORK(&dc->reset_work, tegra_dc_reset_worker);
 #endif
 	INIT_WORK(&dc->vblank_work, tegra_dc_vblank);
-	INIT_DELAYED_WORK(&dc->underflow_work, tegra_dc_underflow_worker);
 	INIT_DELAYED_WORK(&dc->one_shot_work, tegra_dc_one_shot_worker);
 	INIT_DELAYED_WORK(&dc->disable_work, tegra_dc_delayed_disable_work);
 

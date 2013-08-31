@@ -158,7 +158,6 @@ struct tegra_dc {
 	struct dentry			*debugdir;
 #endif
 	struct tegra_dc_lut		fb_lut;
-	struct delayed_work		underflow_work;
 	u32				one_shot_delay_ms;
 	struct delayed_work		one_shot_work;
 	s64				frame_end_timestamp;
