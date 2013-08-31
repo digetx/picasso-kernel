@@ -1445,6 +1445,11 @@ static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 	tegra_dc_setup_clk(dc, dc->clk);
 	tegra_dc_clk_enable(dc);
 
+	tegra_periph_reset_assert(dc->clk);
+	msleep(2);
+	tegra_periph_reset_deassert(dc->clk);
+	msleep(1);
+
 	/* do not accept interrupts during initialization */
 	tegra_dc_writel(dc, 0, DC_CMD_INT_MASK);
 
