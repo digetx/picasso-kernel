@@ -101,6 +101,8 @@ static void set_wake_locked(int wake)
 
 	if (!wake)
 		wake_unlock(&bt_lpm.wake_lock_tx);
+	else
+		wake_lock_timeout(&bt_lpm.wake_lock_tx, HZ * 2);
 
 	gpio_set_value(brcm_4329_gpios.bt_wake, wake);
 }
