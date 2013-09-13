@@ -271,7 +271,6 @@ struct mxt_data {
 	u8 slowscan_shad_actv_cycle_time;
 	u8 slowscan_shad_idle_cycle_time;
 	u8 slowscan_shad_actv2idle_timeout;
-	bool android;
 	bool use_multislot_proto;
 	void (*report) (struct mxt_data *data);
 };
@@ -573,42 +572,23 @@ static void mxt_input_report_android(struct mxt_data *data)
 		if (!finger[id].status)
 			continue;
 
-		if (data->use_multislot_proto) {
-			input_mt_slot(input_dev, id);
-			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
-					 finger[id].status != MXT_RELEASE ?
-							finger[id].area : 0);
-		}
-
-		if (finger[id].status == MXT_RELEASE) {
+		if (finger[id].status == MXT_RELEASE)
 			finger[id].status = 0;
-			if (data->use_multislot_proto)
-				input_report_abs(input_dev,
-						 ABS_MT_TRACKING_ID, -1);
-		} else {
+		else {
 			finger_num++;
 			input_report_abs(input_dev, ABS_MT_TRACKING_ID, id);
 
-			if (!data->use_multislot_proto) {
-				input_report_abs(input_dev, ABS_MT_POSITION_X,
-						 finger[id].x);
-
-				input_report_abs(input_dev, ABS_MT_POSITION_Y,
-						 finger[id].y);
-
-				input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
-						 finger[id].area);
-			}
-		}
-
-		if (data->use_multislot_proto) {
 			input_report_abs(input_dev, ABS_MT_POSITION_X,
 					 finger[id].x);
 
 			input_report_abs(input_dev, ABS_MT_POSITION_Y,
 					 finger[id].y);
-		} else
-			input_mt_sync(input_dev);
+
+			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
+					 finger[id].area);
+		}
+
+		input_mt_sync(input_dev);
 	}
 
 	input_report_key(input_dev, BTN_TOOL_FINGER, !!finger_num);
@@ -616,7 +596,40 @@ static void mxt_input_report_android(struct mxt_data *data)
 	input_sync(input_dev);
 }
 
-/* TODO: multitouch */
+static void mxt_input_report_android_mt(struct mxt_data *data)
+{
+	struct mxt_finger *finger = data->finger;
+	struct input_dev *input_dev = data->input_dev;
+	int finger_num = 0;
+	int id;
+
+	for (id = 0; id < MXT_MAX_FINGER; id++) {
+		if (!finger[id].status)
+			continue;
+
+		input_mt_slot(input_dev, id);
+
+		input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
+				 finger[id].status != MXT_RELEASE ?
+						finger[id].area : 0);
+
+		if (finger[id].status == MXT_RELEASE) {
+			finger[id].status = 0;
+			input_report_abs(input_dev, ABS_MT_TRACKING_ID, -1);
+		} else {
+			finger_num++;
+			input_report_abs(input_dev, ABS_MT_TRACKING_ID, id);
+		}
+
+		input_report_abs(input_dev, ABS_MT_POSITION_X, finger[id].x);
+		input_report_abs(input_dev, ABS_MT_POSITION_Y, finger[id].y);
+	}
+
+	input_report_key(input_dev, BTN_TOOL_FINGER, !!finger_num);
+
+	input_sync(input_dev);
+}
+
 static void mxt_input_report_native(struct mxt_data *data)
 {
 	struct mxt_finger *finger = data->finger;
@@ -639,6 +652,38 @@ static void mxt_input_report_native(struct mxt_data *data)
 		input_report_abs(input_dev, ABS_PRESSURE, finger[id].pressure);
 	}
 
+	input_sync(input_dev);
+}
+
+static void mxt_input_report_native_mt(struct mxt_data *data)
+{
+	struct mxt_finger *finger = data->finger;
+	struct input_dev *input_dev = data->input_dev;
+	int id;
+
+	for (id = 0; id < MXT_MAX_FINGER; id++) {
+		if (!finger[id].status)
+			continue;
+
+		input_mt_slot(input_dev, id);
+		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER,
+				 finger[id].status != MXT_RELEASE ?
+						finger[id].area : 0);
+
+		if (finger[id].status != MXT_RELEASE) {
+			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR,
+					 finger[id].area);
+			input_report_abs(input_dev, ABS_MT_POSITION_X,
+					 finger[id].x);
+			input_report_abs(input_dev, ABS_MT_POSITION_Y,
+					 finger[id].y);
+			input_report_abs(input_dev, ABS_MT_PRESSURE,
+					 MXT_DEFAULT_PRESSURE);
+		} else
+			finger[id].status = 0;
+	}
+
+	input_mt_report_pointer_emulation(input_dev, true);
 	input_sync(input_dev);
 }
 
@@ -1591,12 +1636,8 @@ static struct mxt_platform_data *mxt_parse_dt(struct i2c_client *client,
 		return NULL;
 	pdata->config = config;
 
-	if (of_property_read_bool(of_node, "android-evdev")) {
-		data->android = true;
-
-		if (of_property_read_bool(of_node, "multislot-proto"))
-			data->use_multislot_proto = true;
-	}
+	if (of_property_read_bool(of_node, "multislot-proto"))
+		data->use_multislot_proto = true;
 
 	return pdata;
 }
@@ -1621,7 +1662,8 @@ static int mxt_probe(struct i2c_client *client,
 	pdata = mxt_parse_dt(client, data, np);
 	if (!pdata) {
 		dev_err(&client->dev, "No platform_data\n");
-		return -EINVAL;
+		error = -EINVAL;
+		goto err_free_mem;
 	}
 
 	input_dev->name = "atmel-maxtouch";
@@ -1644,14 +1686,15 @@ static int mxt_probe(struct i2c_client *client,
 	__set_bit(EV_ABS, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
 
-	if (data->android) {
+	if (IS_ENABLED(CONFIG_ANDROID)) {
 		__set_bit(BTN_TOOL_FINGER, input_dev->keybit);
 		__set_bit(EV_SYN, input_dev->evbit);
 
-		data->report = mxt_input_report_android;
-
-		if (data->use_multislot_proto)
+		if (data->use_multislot_proto) {
 			input_mt_init_slots(input_dev, MXT_MAX_FINGER, 0);
+			data->report = mxt_input_report_android_mt;
+		} else
+			data->report = mxt_input_report_android;
 
 		input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
 				     0, MXT_MAX_AREA, 0, 0);
@@ -1662,14 +1705,28 @@ static int mxt_probe(struct i2c_client *client,
 	} else {
 		__set_bit(BTN_TOUCH, input_dev->keybit);
 
-		data->report = mxt_input_report_native;
+		if (0/*data->use_multislot_proto*/) {
+			data->report = mxt_input_report_native_mt;
 
-		input_set_abs_params(input_dev, ABS_X,
-				     0, data->max_x, 0, 0);
-		input_set_abs_params(input_dev, ABS_Y,
-				     0, data->max_y, 0, 0);
-		input_set_abs_params(input_dev, ABS_PRESSURE,
-				     0, 255, 0, 0);
+			input_set_abs_params(input_dev, ABS_MT_POSITION_X,
+					     0, data->max_x, 0, 0);
+			input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
+					     0, data->max_y, 0, 0);
+			input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
+					     0, MXT_MAX_AREA, 0, 0);
+			input_set_abs_params(input_dev, ABS_MT_PRESSURE,
+					     0, 255, 0, 0);
+			input_mt_init_slots(input_dev, MXT_MAX_FINGER, 0);
+		} else {
+			data->report = mxt_input_report_native;
+
+			input_set_abs_params(input_dev, ABS_X,
+					     0, data->max_x, 0, 0);
+			input_set_abs_params(input_dev, ABS_Y,
+					     0, data->max_y, 0, 0);
+			input_set_abs_params(input_dev, ABS_PRESSURE,
+					     0, 255, 0, 0);
+		}
 	}
 
 	input_set_drvdata(input_dev, data);
@@ -1797,25 +1854,22 @@ static int mxt_resume(struct device *dev)
 
 	mutex_unlock(&input_dev->mutex);
 
-	if (data->android) {
-		/* clear userspace slots state */
-		for (id = 0; id < MXT_MAX_FINGER; id++) {
-			finger[id].status = 0;
+	/* clear userspace slots state */
+	for (id = 0; id < MXT_MAX_FINGER; id++) {
+		finger[id].status = 0;
 
-			if (data->use_multislot_proto) {
-				input_mt_slot(input_dev, id);
-				input_report_abs(input_dev,
-						 ABS_MT_TRACKING_ID, -1);
-			} else {
-				if (!finger[id].status)
-					continue;
+		if (data->use_multislot_proto) {
+			input_mt_slot(input_dev, id);
+			input_report_abs(input_dev,
+						ABS_MT_TRACKING_ID, -1);
+		} else {
+			if (!finger[id].status)
+				continue;
 
-				input_mt_sync(input_dev);
-			}
+			input_mt_sync(input_dev);
 		}
-		input_sync(input_dev);
 	}
-
+	input_sync(input_dev);
 
 	return 0;
 }

@@ -461,7 +461,6 @@
 			interrupt-parent = <&gpio>;
 			interrupts = <174 0x2>;
 
-			android-evdev;
 			multislot-proto;
 
 			x-size = <1280>;
