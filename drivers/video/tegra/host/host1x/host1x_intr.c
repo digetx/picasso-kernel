@@ -64,11 +64,14 @@ static irqreturn_t t20_syncpt_thresh_cascade_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static void t20_intr_init_host_sync(struct nvhost_intr *intr)
+static void t20_request_syncpt_irq(struct nvhost_intr *intr)
 {
 	struct nvhost_master *dev = intr_to_dev(intr);
 	void __iomem *sync_regs = dev->sync_aperture;
 	int i, err;
+
+	if (intr->syncpt_irq_requested)
+		return;
 
 	writel(0xffffffffUL,
 	       sync_regs + host1x_sync_syncpt_thresh_int_disable_r());
@@ -78,9 +81,8 @@ static void t20_intr_init_host_sync(struct nvhost_intr *intr)
 	for (i = 0; i < dev->info.nb_pts; i++)
 		INIT_WORK(&intr->syncpt[i].work, t20_syncpt_thresh_cascade_fn);
 
-	err = devm_request_irq(&dev->dev->dev, intr->syncpt_irq,
-			       t20_syncpt_thresh_cascade_isr,
-			       IRQF_SHARED, "host1x_syncpt", intr);
+	err = request_irq(intr->syncpt_irq, t20_syncpt_thresh_cascade_isr,
+			  IRQF_SHARED, "host1x_syncpt", intr);
 	WARN_ON(IS_ERR_VALUE(err));
 
 	/* disable the ip_busy_timeout. this prevents write drops, etc.
@@ -92,6 +94,17 @@ static void t20_intr_init_host_sync(struct nvhost_intr *intr)
 	 * otherwise on ap20.
 	 */
 	writel(0xff, sync_regs + host1x_sync_ctxsw_timeout_cfg_r());
+
+	intr->syncpt_irq_requested = true;
+}
+
+static void t20_free_syncpt_irq(struct nvhost_intr *intr)
+{
+	if (intr->syncpt_irq_requested) {
+		free_irq(intr->syncpt_irq, intr);
+		flush_workqueue(intr->wq);
+		intr->syncpt_irq_requested = false;
+	}
 }
 
 static void t20_intr_set_host_clocks_per_usec(struct nvhost_intr *intr, u32 cpm)
@@ -253,7 +266,8 @@ static void t20_intr_free_host_general_irq(struct nvhost_intr *intr)
 }
 
 static const struct nvhost_intr_ops host1x_intr_ops = {
-	.init_host_sync = t20_intr_init_host_sync,
+	.request_syncpt_irq = t20_request_syncpt_irq,
+	.free_syncpt_irq = t20_free_syncpt_irq,
 	.set_host_clocks_per_usec = t20_intr_set_host_clocks_per_usec,
 	.set_syncpt_threshold = t20_intr_set_syncpt_threshold,
 	.enable_syncpt_intr = t20_intr_enable_syncpt_intr,

@@ -325,13 +325,12 @@ int nvhost_intr_init(struct nvhost_intr *intr, u32 irq_gen, u32 irq_sync)
 
 	mutex_init(&intr->mutex);
 	intr->syncpt_irq = irq_sync;
+	intr->syncpt_irq_requested = false;
 	intr->wq = create_workqueue("host_syncpt");
 	if (!intr->wq)
 		return -ENOMEM;
-	intr_op().init_host_sync(intr);
 	intr->host_general_irq = irq_gen;
 	intr->host_general_irq_requested = false;
-	intr_op().request_host_general_irq(intr);
 
 	for (id = 0, syncpt = intr->syncpt;
 	     id < nb_pts;
@@ -340,9 +339,6 @@ int nvhost_intr_init(struct nvhost_intr *intr, u32 irq_gen, u32 irq_sync)
 		syncpt->id = id;
 		spin_lock_init(&syncpt->lock);
 		INIT_LIST_HEAD(&syncpt->wait_head);
-		snprintf(syncpt->thresh_irq_name,
-			sizeof(syncpt->thresh_irq_name),
-			"host_sp_%02d", id);
 	}
 
 	return 0;
@@ -356,13 +352,13 @@ void nvhost_intr_deinit(struct nvhost_intr *intr)
 
 void nvhost_intr_start(struct nvhost_intr *intr, u32 hz)
 {
-	BUG_ON(!(intr_op().init_host_sync &&
+	BUG_ON(!(intr_op().request_syncpt_irq &&
 		 intr_op().set_host_clocks_per_usec &&
 		 intr_op().request_host_general_irq));
 
 	mutex_lock(&intr->mutex);
 
-	intr_op().init_host_sync(intr);
+	intr_op().request_syncpt_irq(intr);
 	intr_op().set_host_clocks_per_usec(intr,
 					       (hz + 1000000 - 1)/1000000);
 
@@ -378,7 +374,8 @@ void nvhost_intr_stop(struct nvhost_intr *intr)
 	u32 nb_pts = nvhost_syncpt_nb_pts(&intr_to_dev(intr)->syncpt);
 
 	BUG_ON(!(intr_op().disable_all_syncpt_intrs &&
-		 intr_op().free_host_general_irq));
+		 intr_op().free_host_general_irq &&
+		 intr_op().free_syncpt_irq));
 
 	mutex_lock(&intr->mutex);
 
@@ -403,6 +400,7 @@ void nvhost_intr_stop(struct nvhost_intr *intr)
 	}
 
 	intr_op().free_host_general_irq(intr);
+	intr_op().free_syncpt_irq(intr);
 
 	mutex_unlock(&intr->mutex);
 }

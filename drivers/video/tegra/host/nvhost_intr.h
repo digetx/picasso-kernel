@@ -62,7 +62,6 @@ struct nvhost_intr_syncpt {
 	u8 id;
 	spinlock_t lock;
 	struct list_head wait_head;
-	char thresh_irq_name[12];
 	struct work_struct work;
 };
 
@@ -71,6 +70,7 @@ struct nvhost_intr {
 	struct mutex mutex;
 	int host_general_irq;
 	bool host_general_irq_requested;
+	bool syncpt_irq_requested;
 	int syncpt_irq;
 	struct workqueue_struct *wq;
 };
