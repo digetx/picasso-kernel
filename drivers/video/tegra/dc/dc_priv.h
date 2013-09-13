@@ -100,7 +100,6 @@ struct tegra_dc {
 
 	bool				connected;
 	bool				enabled;
-	bool				suspended;
 
 	struct tegra_dc_out		*out;
 	struct tegra_dc_out_ops		*out_ops;

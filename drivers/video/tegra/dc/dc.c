@@ -1721,9 +1721,7 @@ void tegra_dc_disable(struct tegra_dc *dc)
 
 	if (dc->enabled) {
 		dc->enabled = false;
-
-		if (!dc->suspended)
-			_tegra_dc_disable(dc);
+		_tegra_dc_disable(dc);
 	}
 
 #ifdef CONFIG_SWITCH
@@ -2228,11 +2226,8 @@ static int tegra_dc_suspend(struct nvhost_device *ndev, pm_message_t state)
 	if (dc->out_ops && dc->out_ops->suspend)
 		dc->out_ops->suspend(dc);
 
-	if (dc->enabled) {
+	if (dc->enabled)
 		_tegra_dc_disable(dc);
-
-		dc->suspended = true;
-	}
 
 	if (dc->out && dc->out->postsuspend) {
 		dc->out->postsuspend();
@@ -2256,7 +2251,6 @@ static int tegra_dc_resume(struct nvhost_device *ndev)
 	dev_info(&ndev->dev, "resume\n");
 
 	mutex_lock(&dc->lock);
-	dc->suspended = false;
 
 	if (dc->enabled) {
 		_tegra_dc_set_default_videomode(dc);
