@@ -418,6 +418,7 @@ int nvhost_syncpt_init(struct nvhost_device *dev,
 			goto fail;
 		}
 
+		sysfs_attr_init(&min->attr.attr);
 		min->id = i;
 		min->host = host;
 		min->attr.attr.name = min_name;
@@ -428,6 +429,7 @@ int nvhost_syncpt_init(struct nvhost_device *dev,
 			goto fail;
 		}
 
+		sysfs_attr_init(&max->attr.attr);
 		max->id = i;
 		max->host = host;
 		max->attr.attr.name = max_name;

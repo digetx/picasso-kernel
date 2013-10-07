@@ -526,6 +526,9 @@ int nvhost_module_init(struct nvhost_device *dev)
 	}
 	dev->power_attrib->ndev = dev;
 
+	for (i = 0; i < NVHOST_POWER_SYSFS_ATTRIB_MAX; i++)
+		sysfs_attr_init(&dev->power_attrib->power_attr[i].attr);
+
 	dev->power_kobj = kobject_create_and_add("acm", &dev->dev.kobj);
 	if (!dev->power_kobj) {
 		dev_err(&dev->dev, "Could not add dir 'power'\n");
