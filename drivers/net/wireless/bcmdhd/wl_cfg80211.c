@@ -6336,7 +6336,8 @@ int wl_cfg80211_sched_scan_start(struct wiphy *wiphy,
 
 
 	if (!request || !request->n_ssids || !request->n_match_sets) {
-		WL_ERR(("Invalid sched scan req!! n_ssids:%d \n", request->n_ssids));
+		WL_ERR(("Invalid sched scan req!! n_ssids:%d \n",
+			request ? request->n_ssids : 0));
 		return -EINVAL;
 	}
 
