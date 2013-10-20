@@ -65,11 +65,13 @@ void inline ec_lock(void)
 {
 	mutex_lock(&ec_mutex);
 }
+EXPORT_SYMBOL_GPL(ec_lock);
 
 void inline ec_unlock(void)
 {
 	mutex_unlock(&ec_mutex);
 }
+EXPORT_SYMBOL_GPL(ec_unlock);
 
 #define I2C_ERR_TIMEOUT	500
 int ec_read_word_data_locked(const struct ec_reg_data *reg_data)
@@ -97,6 +99,7 @@ int ec_read_word_data_locked(const struct ec_reg_data *reg_data)
 
 	return le16_to_cpu(ret);
 }
+EXPORT_SYMBOL_GPL(ec_read_word_data_locked);
 
 int ec_read_word_data(const struct ec_reg_data *reg_data)
 {
@@ -108,6 +111,7 @@ int ec_read_word_data(const struct ec_reg_data *reg_data)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(ec_read_word_data);
 
 int ec_write_word_data_locked(const struct ec_reg_data *reg_data, u16 value)
 {
@@ -135,6 +139,7 @@ int ec_write_word_data_locked(const struct ec_reg_data *reg_data, u16 value)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ec_write_word_data_locked);
 
 int ec_write_word_data(const struct ec_reg_data *reg_data, u16 value)
 {
@@ -146,6 +151,7 @@ int ec_write_word_data(const struct ec_reg_data *reg_data, u16 value)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(ec_write_word_data);
 
 /*
  * Misc ec control
@@ -756,7 +762,7 @@ int get_board_id(void)
 
 	return board_id;
 }
-EXPORT_SYMBOL(get_board_id);
+EXPORT_SYMBOL_GPL(get_board_id);
 
 static struct mfd_cell ec_cell[] = {
 	{
