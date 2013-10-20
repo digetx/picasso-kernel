@@ -399,12 +399,19 @@ static int ec_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(ec_battery_pm_ops, ec_suspend, ec_resume);
 
+static const struct of_device_id ec_battery_match[] = {
+	{ .compatible = "ec,ec-battery" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, ec_battery_match);
+
 static struct platform_driver ec_battery_driver = {
 	.probe		= ec_probe,
 	.remove		= ec_remove,
 	.driver = {
 		.name	= BATTERY_NAME,
 		.pm	= &ec_battery_pm_ops,
+		.of_match_table = ec_battery_match,
 	},
 };
 module_platform_driver(ec_battery_driver);
