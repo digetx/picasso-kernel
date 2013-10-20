@@ -95,10 +95,17 @@ static int ec_leds_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct of_device_id ec_leds_match[] = {
+	{ .compatible = "ec,ec-leds" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, ec_leds_match);
+
 static struct platform_driver ec_leds_driver = {
 	.driver = {
 		.name	= "ec-leds",
 		.owner	= THIS_MODULE,
+		.of_match_table = ec_leds_match,
 	},
 	.probe	= ec_leds_probe,
 	.remove	= ec_leds_remove,
