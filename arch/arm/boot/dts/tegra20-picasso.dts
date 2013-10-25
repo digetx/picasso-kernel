@@ -385,6 +385,7 @@
 
 				battery {
 					compatible = "acer,a50x-battery";
+					power-supplies = <&gpio_charger>;
 				};
 
 				leds {
@@ -693,6 +694,12 @@
 
 		clocks = <&tegra_car 112>, <&tegra_car 113>, <&tegra_car 94>;
 		clock-names = "pll_a", "pll_a_out0", "mclk";
+	};
+
+	gpio_charger: charger {
+		compatible = "gpio-charger";
+		charger-type = <3>;
+		gpio = <&gpio 171 1>; /* gpio PV3 */
 	};
 
 	memory-controller@7000f400 {
