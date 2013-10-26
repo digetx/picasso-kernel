@@ -133,7 +133,7 @@ int auto_odmdata(void)
  */
 static inline void arch_decomp_setup(void)
 {
-	int uart_id;
+	int uart_id = -1;
 	volatile u32 *apb_misc = (volatile u32 *)TEGRA_APB_MISC_BASE;
 	u32 chip, div;
 
