@@ -44,6 +44,7 @@ static struct rfkill *bt_rfkill;
 struct bcm_bt_lpm {
 	int wake;
 	int host_wake;
+	bool power_enabled;
 	bool irq_disabled;
 	bool rx_wake_lock_released;
 
@@ -62,16 +63,18 @@ static int bcm4329_bt_rfkill_set_power(void *data, bool blocked)
 	irq = gpio_to_irq(brcm_4329_gpios.bt_hostwake);
 
 	// rfkill_ops callback. Turn transmitter on when blocked is false
-	if (!blocked) {
+	if (!blocked && !bt_lpm.power_enabled) {
 		if (bt_lpm.irq_disabled) {
 			enable_irq(irq);
 			enable_irq_wake(irq);
 			bt_lpm.irq_disabled = false;
 		}
 
+		bt_lpm.power_enabled = true;
 		change_power_brcm_4329(true);
 		gpio_direction_output(brcm_4329_gpios.bt_reset, 1);
-	} else {
+	} else if (bt_lpm.power_enabled) {
+		bt_lpm.power_enabled = false;
 		change_power_brcm_4329(false);
 		gpio_direction_output(brcm_4329_gpios.bt_reset, 0);
 
