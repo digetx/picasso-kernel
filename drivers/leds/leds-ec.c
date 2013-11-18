@@ -25,7 +25,7 @@ EC_REG_DATA(POWER_LED_ON,	0x42,	100);
 EC_REG_DATA(CHARGE_LED_ON,	0x43,	100);
 EC_REG_DATA(ANDROID_LEDS_OFF,	0x5A,	100);
 
-static void ec_led_set(struct led_classdev *led_cdev, 
+static void ec_led_set(struct led_classdev *led_cdev,
 		       enum led_brightness value)
 {
 	struct ec_led *led = container_of(led_cdev, struct ec_led, cdev);
@@ -90,7 +90,10 @@ static int ec_leds_probe(struct platform_device *pdev)
 static int ec_leds_remove(struct platform_device *pdev)
 {
 	led_classdev_unregister(&ec_white_led.cdev);
+	cancel_work_sync(&ec_white_led.work);
+
 	led_classdev_unregister(&ec_orange_led.cdev);
+	cancel_work_sync(&ec_orange_led.work);
 
 	return 0;
 }
