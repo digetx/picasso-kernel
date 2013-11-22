@@ -141,6 +141,15 @@
 				};
 			};
 		};
+
+		vi {
+			reg-names = "regs";
+			power-gpio = <&gpio 172 0>; /* gpio PV4 */
+			vcsi-supply = <&avdd_vdac_reg>;
+			port = <1>; /* TEGRA_CAMERA_PORT_CSI_A */
+			lanes = <1>;
+			continuous-clk;
+		};
 	};
 
 	pinmux {
