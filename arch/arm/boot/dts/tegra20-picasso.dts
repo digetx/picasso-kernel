@@ -639,7 +639,7 @@
 			rst-gpio = <&gpio 92 0>; /* gpio PL4 */
 		};
 
-		camera-back1@3d {
+		camera_mt9p111: camera-back1@3d {
 			compatible = "aptina,mt9p111";
 			reg = <0x3d>;
 			pwdn-gpio = <&gpio 88 0>; /* gpio PL0 */
@@ -1023,6 +1023,12 @@
 		compatible = "nvidia,tegra20-camera";
 		power-gpio = <&gpio 172 0>; /* gpio PV4 */
 		vcsi-supply = <&avdd_vdac_reg>;
+	};
+
+	mt9p111-v4l-camera {
+		compatible = "v4l,soc-camera";
+		bus-id = <0>;
+		cam-i2c-bus = <&camera_mt9p111>;
 	};
 
 	tegra-aes@6001a000 {
