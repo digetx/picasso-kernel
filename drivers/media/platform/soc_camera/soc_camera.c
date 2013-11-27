@@ -1092,7 +1092,8 @@ static int soc_camera_init_i2c(struct soc_camera_device *icd,
 
 	return 0;
 ei2cnd:
-	i2c_put_adapter(adap);
+	if (adap)
+		i2c_put_adapter(adap);
 ei2cga:
 	return -ENODEV;
 }
@@ -1106,7 +1107,8 @@ static void soc_camera_free_i2c(struct soc_camera_device *icd)
 	icd->control = NULL;
 	v4l2_device_unregister_subdev(i2c_get_clientdata(client));
 	i2c_unregister_device(client);
-	i2c_put_adapter(adap);
+	if (adap)
+		i2c_put_adapter(adap);
 }
 #else
 #define soc_camera_init_i2c(icd, icl)	(-ENODEV)
