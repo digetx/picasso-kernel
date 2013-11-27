@@ -154,6 +154,14 @@
 				lanes = <1>;
 				continuous-clk;
 			};
+
+			mt9d115-config {
+				compatible = "nvidia,tegra-vi-config";
+				v4l-camera = <&mt9d115_v4l_camera>;
+				port = <2>; /* TEGRA_CAMERA_PORT_CSI_B */
+				lanes = <1>;
+				continuous-clk;
+			};
 		};
 	};
 
@@ -637,7 +645,7 @@
 		status = "okay";
 		clock-frequency = <400000>;
 
-		camera-front@3c {
+		camera_mt9d115: camera-front@3c {
 			compatible = "aptina,mt9d115";
 			reg = <0x3c>;
 			pwdn-gpio = <&gpio 90 0>; /* gpio PL2 */
@@ -1034,6 +1042,12 @@
 		compatible = "v4l,soc-camera";
 		bus-id = <0>;
 		cam-i2c-bus = <&camera_mt9p111>;
+	};
+
+	mt9d115_v4l_camera: mt9d115-soc-camera {
+		compatible = "v4l,soc-camera";
+		bus-id = <0>;
+		cam-i2c-bus = <&camera_mt9d115>;
 	};
 
 	tegra-aes@6001a000 {
