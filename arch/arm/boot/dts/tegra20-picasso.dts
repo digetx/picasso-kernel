@@ -146,9 +146,14 @@
 			reg-names = "regs";
 			power-gpio = <&gpio 172 0>; /* gpio PV4 */
 			vcsi-supply = <&avdd_vdac_reg>;
-			port = <1>; /* TEGRA_CAMERA_PORT_CSI_A */
-			lanes = <1>;
-			continuous-clk;
+
+			mt9p111-config {
+				compatible = "nvidia,tegra-vi-config";
+				v4l-camera = <&mt9p111_v4l_camera>;
+				port = <1>; /* TEGRA_CAMERA_PORT_CSI_A */
+				lanes = <1>;
+				continuous-clk;
+			};
 		};
 	};
 
@@ -1025,7 +1030,7 @@
 		vcsi-supply = <&avdd_vdac_reg>;
 	};
 
-	mt9p111-v4l-camera {
+	mt9p111_v4l_camera: mt9p111-soc-camera {
 		compatible = "v4l,soc-camera";
 		bus-id = <0>;
 		cam-i2c-bus = <&camera_mt9p111>;

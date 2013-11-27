@@ -17,9 +17,8 @@
 #ifndef _TEGRA_CAMERA_H_
 #define _TEGRA_CAMERA_H_
 
-#include <linux/regulator/consumer.h>
-#include <linux/i2c.h>
 #include <linux/nvhost.h>
+#include <linux/of.h>
 
 enum tegra_camera_port {
 	TEGRA_CAMERA_PORT_CSI_A = 1,
@@ -27,14 +26,20 @@ enum tegra_camera_port {
 	TEGRA_CAMERA_PORT_VIP,
 };
 
-struct tegra_camera_platform_data {
-	int			(*enable_camera)(struct nvhost_device *ndev);
-	void			(*disable_camera)(struct nvhost_device *ndev);
+struct tegra_vi_config {
 	bool			flip_h;
 	bool			flip_v;
 	enum tegra_camera_port	port;
 	int			lanes;		/* For CSI port only */
 	bool			continuous_clk;	/* For CSI port only */
+	struct device_node	*cam_np;
+};
+
+struct tegra_camera_platform_data {
+	int			(*enable_camera)(struct nvhost_device *ndev);
+	void			(*disable_camera)(struct nvhost_device *ndev);
+	struct tegra_vi_config	*vi_configs;
+	int			num_configs;
 };
 
 #endif /* _TEGRA_CAMERA_H_ */
