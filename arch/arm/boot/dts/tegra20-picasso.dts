@@ -640,7 +640,7 @@
 		camera-front@3c {
 			compatible = "aptina,mt9d115";
 			reg = <0x3c>;
-			oe-gpio = <&gpio 90 0>; /* gpio PL2 */
+			pwdn-gpio = <&gpio 90 0>; /* gpio PL2 */
 			rst-gpio = <&gpio 92 0>; /* gpio PL4 */
 		};
 
