@@ -12,21 +12,21 @@ config TEGRA_CAMERA
 
 config VIDEO_OV5650
         tristate "OV5650 camera sensor support"
-        depends on I2C && ARCH_TEGRA
+        depends on I2C && ARCH_TEGRA && TEGRA_CAMERA
         ---help---
           This is a driver for the Omnivision OV5650 5MP camera sensor
           for use with the tegra isp.
 
 config VIDEO_YUV
         tristate "SOC2031 camera sensor support"
-        depends on I2C && ARCH_TEGRA
+        depends on I2C && ARCH_TEGRA && TEGRA_CAMERA
         default n
         ---help---
           This is a driver for MT9D115 2M YUV camera sensor
 
 config VIDEO_YUV5
         tristate "SOC5140 camera sensor support"
-        depends on I2C && ARCH_TEGRA
+        depends on I2C && ARCH_TEGRA && TEGRA_CAMERA
         default n
         ---help---
           This is a driver for MT9P111 5M YUV camera sensor
@@ -40,7 +40,7 @@ config VIDEO_LTC3216
 
 config VIDEO_AD5820
         tristate "AD5820 focuser support"
-        depends on I2C && ARCH_TEGRA
+        depends on I2C && ARCH_TEGRA && TEGRA_CAMERA
         ---help---
           This is a driver for the AD5820 focuser
           for use with the tegra isp.

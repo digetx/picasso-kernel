@@ -28,6 +28,7 @@
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
 #include <linux/vmalloc.h>
+#include <linux/of_device.h>
 
 #include <media/soc_camera.h>
 #include <media/v4l2-common.h>
@@ -1071,7 +1072,7 @@ static int soc_camera_init_i2c(struct soc_camera_device *icd,
 	struct i2c_adapter *adap = i2c_get_adapter(icl->i2c_adapter_id);
 	struct v4l2_subdev *subdev;
 
-	if (!adap) {
+	if (!adap && !icl->board_info->of_node) {
 		dev_err(icd->pdev, "Cannot get I2C adapter #%d. No driver?\n",
 			icl->i2c_adapter_id);
 		goto ei2cga;
@@ -1091,7 +1092,8 @@ static int soc_camera_init_i2c(struct soc_camera_device *icd,
 
 	return 0;
 ei2cnd:
-	i2c_put_adapter(adap);
+	if (adap)
+		i2c_put_adapter(adap);
 ei2cga:
 	return -ENODEV;
 }
@@ -1105,7 +1107,8 @@ static void soc_camera_free_i2c(struct soc_camera_device *icd)
 	icd->control = NULL;
 	v4l2_device_unregister_subdev(i2c_get_clientdata(client));
 	i2c_unregister_device(client);
-	i2c_put_adapter(adap);
+	if (adap)
+		i2c_put_adapter(adap);
 }
 #else
 #define soc_camera_init_i2c(icd, icl)	(-ENODEV)
@@ -1530,10 +1533,48 @@ static int soc_camera_video_start(struct soc_camera_device *icd)
 	return 0;
 }
 
+static struct soc_camera_link *soc_camera_i2c_parse_dt(
+	struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct device_node *cam_np;
+	struct soc_camera_link *icl;
+
+	cam_np = of_parse_phandle(np, "cam-i2c-bus", 0);
+	if (!cam_np) {
+		dev_err(&pdev->dev, "cam-i2c-bus phandle not found\n");
+		return NULL;
+	}
+
+	icl = devm_kzalloc(&pdev->dev, sizeof(*icl), GFP_KERNEL);
+	if (!icl) {
+		dev_err(&pdev->dev, "failed to alloc icl\n");
+		return NULL;
+	}
+
+	icl->board_info = devm_kzalloc(&pdev->dev,
+				       sizeof(*icl->board_info), GFP_KERNEL);
+	if (!icl->board_info) {
+		dev_err(&pdev->dev, "failed to alloc board_info\n");
+		return NULL;
+	}
+
+	icl->i2c_adapter_id = -1;
+	icl->board_info->of_node = cam_np;
+
+	of_property_read_u32(np, "bus-id", &icl->bus_id);
+
+	return icl;
+}
+
 static int soc_camera_pdrv_probe(struct platform_device *pdev)
 {
+	struct device_node *np = pdev->dev.of_node;
 	struct soc_camera_link *icl = pdev->dev.platform_data;
 	struct soc_camera_device *icd;
+
+	if (np && !icl)
+		icl = soc_camera_i2c_parse_dt(pdev);
 
 	if (!icl)
 		return -EINVAL;
@@ -1570,12 +1611,19 @@ static int soc_camera_pdrv_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static struct of_device_id soc_camera_pdrv_match[] = {
+	{ .compatible = "v4l,soc-camera", },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, soc_camera_pdrv_match);
+
 static struct platform_driver __refdata soc_camera_pdrv = {
 	.probe = soc_camera_pdrv_probe,
 	.remove  = soc_camera_pdrv_remove,
 	.driver  = {
 		.name	= "soc-camera-pdrv",
 		.owner	= THIS_MODULE,
+		.of_match_table	= of_match_ptr(soc_camera_pdrv_match),
 	},
 };
 

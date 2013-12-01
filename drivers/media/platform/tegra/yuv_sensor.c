@@ -44,7 +44,7 @@ struct sensor_info {
 	int mode;
 	u16 coarse_time;
 	struct i2c_client *i2c_client;
-	int oe_gpio;
+	int pwdn_gpio;
 	int rst_gpio;
 };
 
@@ -448,21 +448,18 @@ static long sensor_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 static void sensor_power_on(struct sensor_info *info)
 {
-	gpio_direction_output(info->oe_gpio, 0);
-	gpio_direction_output(info->rst_gpio, 1);
-	msleep(1);
 	tegra_camera_gpio_set(1);
 	msleep(1);
-	gpio_direction_output(info->rst_gpio, 0);
+	gpio_direction_output(info->pwdn_gpio, 0);
 	msleep(1);
 	gpio_direction_output(info->rst_gpio, 1);
+	msleep(1);
 }
 
 static void sensor_power_off(struct sensor_info *info)
 {
-	gpio_direction_output(info->oe_gpio, 1);
 	tegra_camera_gpio_set(0);
-	gpio_direction_output(info->oe_gpio, 0);
+	gpio_direction_output(info->pwdn_gpio, 1);
 	gpio_direction_output(info->rst_gpio, 0);
 }
 
@@ -547,16 +544,16 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		return -ENOMEM;
 	}
 
-	info->oe_gpio = of_get_named_gpio(np, "oe-gpio", 0);
-	if (info->oe_gpio == -EPROBE_DEFER)
+	info->pwdn_gpio = of_get_named_gpio(np, "pwdn-gpio", 0);
+	if (info->pwdn_gpio == -EPROBE_DEFER)
 		return -EPROBE_DEFER;
 
 	info->rst_gpio = of_get_named_gpio(np, "rst-gpio", 0);
 	if (info->rst_gpio == -EPROBE_DEFER)
 		return -EPROBE_DEFER;
 
-	if (gpio_is_valid(info->oe_gpio)) {
-		err = devm_gpio_request_one(&client->dev, info->oe_gpio,
+	if (gpio_is_valid(info->pwdn_gpio)) {
+		err = devm_gpio_request_one(&client->dev, info->pwdn_gpio,
 					    GPIOF_OUT_INIT_LOW, "yuv_oe");
 	} else
 		err = -EINVAL;
