@@ -27,10 +27,12 @@
 #include <linux/platform_data/mmc-sdhci-tegra.h>
 #include <linux/uaccess.h>
 #include <linux/syscalls.h>
+#include <linux/syscore_ops.h>
 #include <linux/reboot.h>
 
 #include "board-picasso.h"
 #include "clock.h"
+#include "iomap.h"
 #include "pm.h"
 
 /******************************************************************************
@@ -339,6 +341,44 @@ static struct suspend_params picasso_sparams = {
 	.combined_req = false,
 };
 
+/*
+ * Some board revision has issue with wake gpio raised unexpectedly on
+ * resume while pmc reports valid wake source. Disable spurious gpio irq on
+ * resume in case it wasn't actual wakeup source and re-enable it on suspend
+ * to workaround issue.
+ */
+static bool gpio_pc7_irq_disabled;
+
+static int picasso_wakeup_workaround_syscore_suspend(void)
+{
+	if (gpio_pc7_irq_disabled) {
+		int irq = gpio_to_irq(TEGRA_GPIO_PC7);
+		gpio_pc7_irq_disabled = false;
+
+		enable_irq(irq);
+	}
+
+	return 0;
+}
+
+static void picasso_wakeup_workaround_syscore_resume(void)
+{
+	void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
+	u32 wake_status = readl(pmc + 0x14);
+
+	if (wake_status != 0x100) {
+		int irq = gpio_to_irq(TEGRA_GPIO_PC7);
+		gpio_pc7_irq_disabled = true;
+
+		disable_irq(irq);
+	}
+}
+
+static struct syscore_ops picasso_syscore_ops = {
+	.suspend = picasso_wakeup_workaround_syscore_suspend,
+	.resume = picasso_wakeup_workaround_syscore_resume,
+};
+
 void __init picasso_machine_init(void)
 {
 	tegra_clk_init_from_table(tegra_picasso_clk_init_table);
@@ -348,4 +388,5 @@ void __init picasso_machine_init(void)
 
 	tegra_init_suspend(&picasso_sparams);
 	register_reboot_notifier(&picasso_reboot_notifier);
+	register_syscore_ops(&picasso_syscore_ops);
 }
