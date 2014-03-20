@@ -98,8 +98,6 @@ static const u8 tegra_udc_test_packet[53] = {
 	0xfc, 0x7e, 0xbf, 0xdf, 0xef, 0xf7, 0xfb, 0xfd, 0x7e
 };
 
-static struct tegra_udc *the_udc;
-
 #ifdef CONFIG_TEGRA_GADGET_BOOST_CPU_FREQ
 	static struct pm_qos_request_list boost_cpu_freq_req;
 	static u32 ep_queue_request_count;
@@ -638,6 +636,7 @@ static int tegra_ep_disable(struct usb_ep *_ep)
 	nuke(ep, -ESHUTDOWN);
 
 	ep->desc = NULL;
+	ep->ep.desc = NULL;
 	ep->stopped = 1;
 	spin_unlock_irqrestore(&udc->lock, flags);
 
@@ -752,8 +751,9 @@ out:
  * @is_last : return flag if it is the last dTD of the request
  * return   : pointer to the built dTD
  */
-static struct ep_td_struct *tegra_build_dtd(struct tegra_req *req,
-	unsigned *length, dma_addr_t *dma, int *is_last, gfp_t gfp_flags)
+static struct ep_td_struct *tegra_build_dtd(struct tegra_udc *udc,
+	struct tegra_req *req, unsigned *length, dma_addr_t *dma,
+	int *is_last, gfp_t gfp_flags)
 {
 	u32 swap_temp;
 	struct ep_td_struct *dtd;
@@ -762,7 +762,7 @@ static struct ep_td_struct *tegra_build_dtd(struct tegra_req *req,
 	*length = min(req->req.length - req->req.actual,
 			(unsigned)EP_MAX_LENGTH_TRANSFER);
 
-	dtd = dma_pool_alloc(the_udc->td_pool, gfp_flags, dma);
+	dtd = dma_pool_alloc(udc->td_pool, gfp_flags, dma);
 	if (dtd == NULL)
 		return dtd;
 
@@ -813,7 +813,8 @@ static struct ep_td_struct *tegra_build_dtd(struct tegra_req *req,
 }
 
 /* Generate dtd chain for a request */
-static int tegra_req_to_dtd(struct tegra_req *req, gfp_t gfp_flags)
+static int tegra_req_to_dtd(struct tegra_udc *udc, struct tegra_req *req,
+			    gfp_t gfp_flags)
 {
 	unsigned	count;
 	int		is_last;
@@ -821,10 +822,11 @@ static int tegra_req_to_dtd(struct tegra_req *req, gfp_t gfp_flags)
 	struct ep_td_struct	*last_dtd = NULL, *dtd;
 	dma_addr_t dma;
 
-	tegra_usb_phy_memory_prefetch_off(the_udc->phy);
+	tegra_usb_phy_memory_prefetch_off(udc->phy);
 
 	do {
-		dtd = tegra_build_dtd(req, &count, &dma, &is_last, gfp_flags);
+		dtd = tegra_build_dtd(udc, req, &count, &dma, &is_last,
+				      gfp_flags);
 		if (dtd == NULL)
 			return -ENOMEM;
 
@@ -914,7 +916,7 @@ tegra_ep_queue(struct usb_ep *_ep, struct usb_request *_req, gfp_t gfp_flags)
 
 
 	/* build dtds and push them to device queue */
-	status = tegra_req_to_dtd(req, gfp_flags);
+	status = tegra_req_to_dtd(udc, req, gfp_flags);
 	if (status)
 		goto err_unmap;
 
@@ -1290,9 +1292,10 @@ static void tegra_udc_release(struct device *dev)
 	usb_phy_shutdown(&udc->phy->u_phy);
 }
 
-static int tegra_udc_start(struct usb_gadget_driver *driver,
-		int (*bind)(struct usb_gadget *, struct usb_gadget_driver *));
-static int tegra_udc_stop(struct usb_gadget_driver *driver);
+static int tegra_udc_start(struct usb_gadget *gadget,
+			   struct usb_gadget_driver *driver);
+static int tegra_udc_stop(struct usb_gadget *gadget,
+			  struct usb_gadget_driver *driver);
 /* defined in gadget.h */
 static struct usb_gadget_ops tegra_gadget_ops = {
 	.get_frame = tegra_get_frame,
@@ -1300,8 +1303,8 @@ static struct usb_gadget_ops tegra_gadget_ops = {
 	.vbus_session = tegra_vbus_session,
 	.vbus_draw = tegra_vbus_draw,
 	.pullup = tegra_pullup,
-	.start = tegra_udc_start,
-	.stop = tegra_udc_stop,
+	.udc_start = tegra_udc_start,
+	.udc_stop = tegra_udc_stop,
 };
 
 static int tegra_udc_setup_gadget_dev(struct tegra_udc *udc)
@@ -1315,11 +1318,12 @@ static int tegra_udc_setup_gadget_dev(struct tegra_udc *udc)
 	udc->gadget.name = driver_name;
 
 	/* Setup gadget.dev and register with kernel */
+	device_initialize(&udc->gadget.dev);
 	dev_set_name(&udc->gadget.dev, "gadget");
 	udc->gadget.dev.release = tegra_udc_release;
 	udc->gadget.dev.parent = &udc->pdev->dev;
 
-	return device_register(&udc->gadget.dev);
+	return device_add(&udc->gadget.dev);
 }
 
 
@@ -1360,7 +1364,7 @@ static int ep0_prime_status(struct tegra_udc *udc, int direction)
 	req->req.complete = NULL;
 	req->dtd_count = 0;
 
-	if (tegra_req_to_dtd(req, GFP_ATOMIC) == 0)
+	if (tegra_req_to_dtd(udc, req, GFP_ATOMIC) == 0)
 		tegra_queue_td(ep, req);
 	else
 		return -ENOMEM;
@@ -1452,7 +1456,7 @@ static void ch9getstatus(struct tegra_udc *udc, u8 request_type, u16 value,
 	}
 
 	/* prime the data phase */
-	if ((tegra_req_to_dtd(req, GFP_ATOMIC) == 0))
+	if ((tegra_req_to_dtd(udc, req, GFP_ATOMIC) == 0))
 		tegra_queue_td(ep, req);
 	else			/* no mem */
 		goto stall;
@@ -1534,7 +1538,7 @@ static void udc_test_mode(struct tegra_udc *udc, u32 test_mode)
 						: DMA_FROM_DEVICE);
 
 		/* prime the data phase */
-		if ((tegra_req_to_dtd(req, GFP_ATOMIC) == 0))
+		if ((tegra_req_to_dtd(udc, req, GFP_ATOMIC) == 0))
 			tegra_queue_td(ep, req);
 		else			/* no mem */
 			goto stall;
@@ -2148,25 +2152,12 @@ done:
  * Hook to gadget drivers
  * Called by initialization code of gadget drivers
  */
-static int tegra_udc_start(struct usb_gadget_driver *driver,
-		int (*bind)(struct usb_gadget *, struct usb_gadget_driver *))
+static int tegra_udc_start(struct usb_gadget *gadget,
+			   struct usb_gadget_driver *driver)
 {
-	struct tegra_udc *udc = the_udc;
-	int retval = -ENODEV;
+	struct tegra_udc *udc = container_of(gadget, struct tegra_udc, gadget);
 	unsigned long flags = 0;
 	DBG("%s(%d) BEGIN\n", __func__, __LINE__);
-
-	if (!udc)
-		return -ENODEV;
-
-	if (!driver || (driver->max_speed != USB_SPEED_FULL
-				&& driver->max_speed != USB_SPEED_HIGH)
-			|| !bind || !driver->disconnect
-			|| !driver->setup)
-		return -EINVAL;
-
-	if (udc->driver)
-		return -EBUSY;
 
 	/* lock is needed but whether should use this lock or another */
 	spin_lock_irqsave(&udc->lock, flags);
@@ -2175,16 +2166,9 @@ static int tegra_udc_start(struct usb_gadget_driver *driver,
 	/* hook up the driver */
 	udc->driver = driver;
 	udc->gadget.dev.driver = &driver->driver;
-	spin_unlock_irqrestore(&udc->lock, flags);
+	udc->gadget.speed = driver->max_speed;
 
-	/* bind udc driver to gadget driver */
-	retval = bind(&udc->gadget, driver);
-	if (retval) {
-		VDBG("bind to %s --> %d", driver->driver.name, retval);
-		udc->gadget.dev.driver = NULL;
-		udc->driver = NULL;
-		goto out;
-	}
+	spin_unlock_irqrestore(&udc->lock, flags);
 
 	/* Enable DR IRQ reg and Set usbcmd reg  Run bit */
 	if (vbus_enabled(udc)) {
@@ -2195,31 +2179,19 @@ static int tegra_udc_start(struct usb_gadget_driver *driver,
 		udc->vbus_active = vbus_enabled(udc);
 	}
 
-	printk(KERN_INFO "%s: bind to driver %s\n",
-			udc->gadget.name, driver->driver.name);
-
-out:
-	if (retval)
-		printk(KERN_WARNING "gadget driver register failed %d\n",
-								retval);
-
 	DBG("%s(%d) END\n", __func__, __LINE__);
-	return retval;
+	return 0;
 }
 
 /* Disconnect from gadget driver */
-static int tegra_udc_stop(struct usb_gadget_driver *driver)
+static int tegra_udc_stop(struct usb_gadget *gadget,
+			  struct usb_gadget_driver *driver)
 {
-	struct tegra_udc *udc = the_udc;
+	struct tegra_udc *udc = container_of(gadget, struct tegra_udc, gadget);
 	struct tegra_ep *loop_ep;
 	unsigned long flags;
 
 	DBG("%s(%d) BEGIN\n", __func__, __LINE__);
-	if (!udc)
-		return -ENODEV;
-
-	if (!driver || driver != udc->driver || !driver->unbind)
-		return -EINVAL;
 
 	/* stop DR, disable intr */
 	dr_controller_stop(udc);
@@ -2238,19 +2210,10 @@ static int tegra_udc_stop(struct usb_gadget_driver *driver)
 		nuke(loop_ep, -ESHUTDOWN);
 	spin_unlock_irqrestore(&udc->lock, flags);
 
-	/* report disconnect; the controller is already quiesced */
-	driver->disconnect(&udc->gadget);
-
-	/* unbind gadget and unhook driver. */
-	driver->unbind(&udc->gadget);
 	udc->gadget.dev.driver = NULL;
 	udc->driver = NULL;
 
-	printk(KERN_WARNING "unregistered gadget driver '%s'\n",
-	       driver->driver.name);
-
 	DBG("%s(%d) END\n", __func__, __LINE__);
-
 	return 0;
 }
 
@@ -2404,7 +2367,7 @@ static int tegra_udc_probe(struct platform_device *pdev)
 	if (!pdev->dev.coherent_dma_mask)
 		pdev->dev.coherent_dma_mask = tegra_ehci_dma_mask;
 
-	the_udc = udc = devm_kzalloc(&pdev->dev, sizeof(struct tegra_udc),
+	udc = devm_kzalloc(&pdev->dev, sizeof(struct tegra_udc),
 				     GFP_KERNEL);
 	if (udc == NULL) {
 		dev_err(&pdev->dev, "malloc udc failed\n");
