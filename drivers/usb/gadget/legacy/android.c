@@ -1655,6 +1655,12 @@ static int android_create_device(struct android_dev *dev)
 	return 0;
 }
 
+static int udc_is_newstyle(struct usb_gadget *gadget)
+{
+	if (gadget->ops->udc_start && gadget->ops->udc_stop)
+		return 1;
+	return 0;
+}
 
 static int __init init(void)
 {
@@ -1694,6 +1700,9 @@ static int __init init(void)
 	/* HACK: exchange composite's setup with ours */
 	composite_setup_func = android_usb_driver.gadget_driver.setup;
 	android_usb_driver.gadget_driver.setup = android_setup;
+
+	if (udc_is_newstyle(dev->cdev->gadget))
+		usb_gadget_disconnect(dev->cdev->gadget);
 
 	return 0;
 
