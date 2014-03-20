@@ -1527,6 +1527,12 @@ static int android_create_device(struct android_dev *dev)
 	return 0;
 }
 
+static int udc_is_newstyle(struct usb_gadget *gadget)
+{
+	if (gadget->ops->udc_start && gadget->ops->udc_stop)
+		return 1;
+	return 0;
+}
 
 static int __init init(void)
 {
@@ -1560,7 +1566,11 @@ static int __init init(void)
 	composite_driver_template.setup = android_setup;
 	composite_driver_template.disconnect = android_disconnect;
 
-	return usb_composite_probe(&android_usb_driver);
+	err = usb_composite_probe(&android_usb_driver);
+	if (!err && udc_is_newstyle(dev->cdev->gadget))
+		usb_gadget_disconnect(dev->cdev->gadget);
+
+	return err;
 }
 module_init(init);
 
