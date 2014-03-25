@@ -36,6 +36,10 @@ obj-$(CONFIG_USB_FUSB300)	+= fusb300_udc.o
 obj-$(CONFIG_USB_FOTG210_UDC)	+= fotg210-udc.o
 obj-$(CONFIG_USB_MV_U3D)	+= mv_u3d_core.o
 obj-$(CONFIG_USB_GR_UDC)	+= gr_udc.o
+obj-$(CONFIG_USB_TEGRA)		+= tegra_udc.o
+ifdef CONFIG_USB_TEGRA
+ccflags-y			+= -DNET_IP_ALIGN=0
+endif
 
 # USB Functions
 usb_f_acm-y			:= f_acm.o

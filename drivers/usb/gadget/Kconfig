@@ -347,6 +347,16 @@ config USB_MV_U3D
 	  MARVELL PXA2128 Processor series include a super speed USB3.0 device
 	  controller, which support super speed USB peripheral.
 
+config USB_TEGRA
+	tristate "Nvidia Highspeed USB 2.0 device controller"
+	depends on ARCH_TEGRA
+	help
+	   Enables TEGRA USB 2.0 pheripheral driver.
+
+	   Say "y" to link the driver statically, or "m" to build a
+	   dynamically linked module called "tegra_udc" and force all
+	   gadget drivers to also be dynamically linked.
+
 #
 # Controllers available in both integrated and discrete versions
 #

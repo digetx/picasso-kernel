@@ -63,6 +63,7 @@ struct tegra_usb_phy {
 	const struct tegra_xtal_freq *freq;
 	void __iomem *regs;
 	void __iomem *pad_regs;
+	void __iomem *ahb_gizmo;
 	struct clk *clk;
 	struct clk *pll_u;
 	struct clk *pad_clk;
@@ -85,5 +86,9 @@ void tegra_ehci_phy_restore_start(struct usb_phy *phy,
 				 enum tegra_usb_phy_port_speed port_speed);
 
 void tegra_ehci_phy_restore_end(struct usb_phy *phy);
+
+void tegra_usb_phy_memory_prefetch_on(struct usb_phy *phy);
+
+void tegra_usb_phy_memory_prefetch_off(struct usb_phy *phy);
 
 #endif /* __TEGRA_USB_PHY_H */

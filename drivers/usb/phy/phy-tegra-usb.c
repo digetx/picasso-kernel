@@ -157,6 +157,10 @@
 #define   USB_USBMODE_HOST		(3 << 0)
 #define   USB_USBMODE_DEVICE		(2 << 0)
 
+#define AHB_MEM_PREFETCH_CFG1		0xec
+#define   AHB_MEM_PREFETCH_CFG2		0xf0
+#define   PREFETCH_ENB			(1 << 31)
+
 static DEFINE_SPINLOCK(utmip_pad_lock);
 static int utmip_pad_count;
 
@@ -847,6 +851,38 @@ void tegra_ehci_phy_restore_end(struct usb_phy *x)
 }
 EXPORT_SYMBOL_GPL(tegra_ehci_phy_restore_end);
 
+void tegra_usb_phy_memory_prefetch_on(struct usb_phy *x)
+{
+	struct tegra_usb_phy *phy = container_of(x, struct tegra_usb_phy, u_phy);
+	unsigned long val;
+
+	if (phy->is_legacy_phy && phy->mode == USB_DR_MODE_PERIPHERAL) {
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val |= PREFETCH_ENB;
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+		val |= PREFETCH_ENB;
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+	}
+}
+EXPORT_SYMBOL_GPL(tegra_usb_phy_memory_prefetch_on);
+
+void tegra_usb_phy_memory_prefetch_off(struct usb_phy *x)
+{
+	struct tegra_usb_phy *phy = container_of(x, struct tegra_usb_phy, u_phy);
+	unsigned long val;
+
+	if (phy->is_legacy_phy && phy->mode == USB_DR_MODE_PERIPHERAL) {
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val &= ~(PREFETCH_ENB);
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG1);
+		val = readl(phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+		val &= ~(PREFETCH_ENB);
+		writel(val, phy->ahb_gizmo + AHB_MEM_PREFETCH_CFG2);
+	}
+}
+EXPORT_SYMBOL_GPL(tegra_usb_phy_memory_prefetch_off);
+
 static int read_utmi_param(struct platform_device *pdev, const char *param,
 			   u8 *dest)
 {
@@ -874,11 +910,25 @@ static int utmi_phy_probe(struct tegra_usb_phy *tegra_phy,
 		return  -ENXIO;
 	}
 
-	tegra_phy->pad_regs = devm_ioremap(&pdev->dev, res->start,
-		resource_size(res));
-	if (!tegra_phy->pad_regs) {
-		dev_err(&pdev->dev, "Failed to remap UTMI Pad regs\n");
-		return -ENOMEM;
+	if (tegra_phy->is_legacy_phy) {
+		tegra_phy->pad_regs = tegra_phy->regs;
+
+		if (tegra_phy->mode == USB_DR_MODE_PERIPHERAL) {
+			tegra_phy->ahb_gizmo = devm_ioremap(
+				&pdev->dev, res->start, resource_size(res));
+			if (!tegra_phy->ahb_gizmo) {
+				dev_err(&pdev->dev, "Failed to remap UTMI "
+								"gizmo regs\n");
+				return -ENOMEM;
+			}
+		}
+	} else {
+		tegra_phy->pad_regs = devm_ioremap(&pdev->dev, res->start,
+			resource_size(res));
+		if (!tegra_phy->pad_regs) {
+			dev_err(&pdev->dev, "Failed to remap UTMI Pad regs\n");
+			return -ENOMEM;
+		}
 	}
 
 	tegra_phy->config = devm_kzalloc(&pdev->dev,
@@ -1010,6 +1060,16 @@ static int tegra_usb_phy_probe(struct platform_device *pdev)
 	tegra_phy->is_legacy_phy =
 		of_property_read_bool(np, "nvidia,has-legacy-mode");
 
+	if (of_find_property(np, "dr_mode", NULL))
+		tegra_phy->mode = of_usb_get_dr_mode(np);
+	else
+		tegra_phy->mode = USB_DR_MODE_HOST;
+
+	if (tegra_phy->mode == USB_DR_MODE_UNKNOWN) {
+		dev_err(&pdev->dev, "dr_mode is invalid\n");
+		return -EINVAL;
+	}
+
 	phy_type = of_usb_get_phy_mode(np);
 	switch (phy_type) {
 	case USBPHY_INTERFACE_MODE_UTMI:
@@ -1033,16 +1093,6 @@ static int tegra_usb_phy_probe(struct platform_device *pdev)
 
 	default:
 		dev_err(&pdev->dev, "phy_type is invalid or unsupported\n");
-		return -EINVAL;
-	}
-
-	if (of_find_property(np, "dr_mode", NULL))
-		tegra_phy->mode = of_usb_get_dr_mode(np);
-	else
-		tegra_phy->mode = USB_DR_MODE_HOST;
-
-	if (tegra_phy->mode == USB_DR_MODE_UNKNOWN) {
-		dev_err(&pdev->dev, "dr_mode is invalid\n");
 		return -EINVAL;
 	}
 
