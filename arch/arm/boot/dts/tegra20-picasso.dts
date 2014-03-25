@@ -676,11 +676,14 @@
 	};
 
 	usb@c5000000 {
-		status = "disabled";
+		compatible = "nvidia,tegra20-udc";
+		status = "okay";
 	};
 
 	usb-phy@c5000000 {
-		status = "disabled";
+		reg = <0xc5000000 0x4000 0x6000c004 0x10c>;
+		status = "okay";
+		dr_mode = "peripheral";
 		vbus-supply = <&vbus1_reg>;
 	};
 
