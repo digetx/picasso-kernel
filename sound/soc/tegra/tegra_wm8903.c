@@ -54,9 +54,7 @@
 struct tegra_wm8903 {
 	struct tegra_wm8903_platform_data pdata;
 	struct tegra_asoc_utils_data util_data;
-#ifdef CONFIG_SWITCH
 	int jack_status;
-#endif
 	struct regulator *dmic_reg;
 };
 
@@ -155,7 +153,6 @@ static struct snd_soc_ops tegra_spdif_ops = {
 
 static struct snd_soc_jack tegra_wm8903_hp_jack;
 
-#ifdef CONFIG_SWITCH
 /* These values are copied from Android WiredAccessoryObserver */
 enum headset_state {
 	BIT_NO_HEADSET = 0,
@@ -163,9 +160,11 @@ enum headset_state {
 	BIT_HEADSET_NO_MIC = (1 << 1),
 };
 
+#ifdef CONFIG_SWITCH
 static struct switch_dev tegra_wm8903_hp_switch = {
 	.name = "h2w",
 };
+#endif
 
 static int tegra_wm8903_jack_notifier(struct notifier_block *self,
                                       unsigned long action, void *dev)
@@ -204,22 +203,22 @@ static int tegra_wm8903_jack_notifier(struct notifier_block *self,
 		state = BIT_NO_HEADSET;
 	}
 
+#ifdef CONFIG_SWITCH
 	switch_set_state(&tegra_wm8903_hp_switch, state);
-
+#endif
 	return NOTIFY_OK;
 }
 
 static struct notifier_block tegra_wm8903_jack_detect_nb = {
 	.notifier_call = tegra_wm8903_jack_notifier,
 };
-#else
+
 static struct snd_soc_jack_pin tegra_wm8903_hp_jack_pins[] = {
 	{
 		.pin = "Headphone Jack",
 		.mask = SND_JACK_HEADPHONE,
 	},
 };
-#endif
 
 static struct snd_soc_jack_gpio tegra_wm8903_hp_jack_gpio = {
 	.name = "headphone detect",
@@ -329,14 +328,11 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 		tegra_wm8903_hp_jack_gpio.gpio = pdata->gpio_hp_det;
 		snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,
 						&tegra_wm8903_hp_jack);
-#ifdef CONFIG_SWITCH
 		snd_soc_jack_notifier_register(&tegra_wm8903_hp_jack,
 						&tegra_wm8903_jack_detect_nb);
-#else
 		snd_soc_jack_add_pins(&tegra_wm8903_hp_jack,
 					ARRAY_SIZE(tegra_wm8903_hp_jack_pins),
 					tegra_wm8903_hp_jack_pins);
-#endif
 		snd_soc_jack_add_gpios(&tegra_wm8903_hp_jack,
 					1,
 					&tegra_wm8903_hp_jack_gpio);
