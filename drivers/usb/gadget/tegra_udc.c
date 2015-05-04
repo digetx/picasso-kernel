@@ -1236,7 +1236,7 @@ static void tegra_udc_release(struct device *dev)
 {
 	struct tegra_udc *udc = container_of(dev, struct tegra_udc, gadget.dev);
 
-	usb_phy_shutdown(udc->phy);
+	usb_phy_set_suspend(udc->phy, 1);
 	complete(udc->done);
 }
 
@@ -2445,6 +2445,8 @@ static int tegra_udc_remove(struct platform_device *pdev)
 
 	/* Free udc -- wait for the release() finished */
 	wait_for_completion(&done);
+
+	clk_disable_unprepare(udc->clk);
 
 	return 0;
 }
