@@ -705,6 +705,62 @@ static int tegra_overlay_ioctl_set_nvmap_fd(struct overlay_client *client,
 	return 0;
 }
 
+static int set_lut_channel(u16 *channel_from_user,
+			   u8 *channel_to,
+			   u32 start,
+			   u32 len)
+{
+	int i;
+	u16 lut16bpp[256];
+
+	if (channel_from_user) {
+		if (copy_from_user(lut16bpp, channel_from_user, len<<1))
+			return 1;
+
+		for (i = 0; i < len; i++)
+			channel_to[start+i] = lut16bpp[i];
+	} else {
+		for (i = 0; i < len; i++)
+			channel_to[start+i] = start+i;
+	}
+
+	return 0;
+}
+
+static int tegra_overlay_set_lut(struct overlay_client *client,
+				struct tegra_dc_ext_lut *new_lut)
+{
+	struct tegra_overlay_info *dev = client->dev;
+	unsigned int index = new_lut->win_index;
+	u32 start = new_lut->start;
+	u32 len = new_lut->len;
+	int err;
+
+	struct tegra_dc *dc = dev->dc;
+	struct tegra_dc_lut *lut;
+
+	if (index >= DC_N_WINDOWS)
+		return -EINVAL;
+
+	if ((start >= 256) || (len > 256) || ((start + len) > 256))
+		return -EINVAL;
+
+	lut = &dc->windows[index].lut;
+
+	err = set_lut_channel(new_lut->r, lut->r, start, len) |
+	      set_lut_channel(new_lut->g, lut->g, start, len) |
+	      set_lut_channel(new_lut->b, lut->b, start, len);
+
+	if (err) {
+		return -EFAULT;
+	}
+
+	tegra_dc_update_lut(dc, index,
+			new_lut->flags & TEGRA_DC_EXT_LUT_FLAGS_FBOVERRIDE);
+
+	return 0;
+}
+
 /* File operations */
 static int tegra_overlay_open(struct inode *inode, struct file *filp)
 {
@@ -797,6 +853,15 @@ static long tegra_overlay_ioctl(struct file *filp, unsigned int cmd,
 	case TEGRA_OVERLAY_IOCTL_SET_NVMAP_FD:
 		err = tegra_overlay_ioctl_set_nvmap_fd(client, uarg);
 		break;
+	case TEGRA_OVERLAY_IOCTL_SET_LUT:
+	{
+		struct tegra_dc_ext_lut args;
+
+		if (copy_from_user(&args, uarg, sizeof(args)))
+			return -EFAULT;
+
+		return tegra_overlay_set_lut(client, &args);
+	}
 	default:
 		return -ENOTTY;
 	}
