@@ -369,6 +369,11 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 		if (invert_v)
 			val |= V_DIRECTION_DECREMENT;
 
+		if (win->ppflags & TEGRA_WIN_PPFLAG_DV_ENABLE) {
+			tegra_dc_writel(dc, win->dv, DC_WIN_DV_CONTROL);
+			val |= DV_ENABLE;
+		}
+
 		tegra_dc_writel(dc, val, DC_WIN_WIN_OPTIONS);
 
 #ifdef CONFIG_ARCH_TEGRA_3x_SOC
