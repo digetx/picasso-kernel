@@ -460,7 +460,6 @@ struct tegra_dc_win {
 	u8			global_alpha;
 
 	struct tegra_dc_csc	csc;
-	u32			dv;
 
 	int			dirty;
 	int			underflows;
@@ -474,7 +473,6 @@ struct tegra_dc_win {
 
 #define TEGRA_WIN_PPFLAG_CP_ENABLE	(1 << 0) /* enable RGB color lut */
 #define TEGRA_WIN_PPFLAG_CP_FBOVERRIDE	(1 << 1) /* override fbdev color lut */
-#define TEGRA_WIN_PPFLAG_DV_ENABLE	(1 << 2) /* enable digital vibrance */
 
 #define TEGRA_WIN_FLAG_ENABLED		(1 << 0)
 #define TEGRA_WIN_FLAG_BLEND_PREMULT	(1 << 1)

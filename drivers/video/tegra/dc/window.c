@@ -369,9 +369,6 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 		if (invert_v)
 			val |= V_DIRECTION_DECREMENT;
 
-		if (win->ppflags & TEGRA_WIN_PPFLAG_DV_ENABLE)
-			val |= DV_ENABLE;
-
 		tegra_dc_writel(dc, val, DC_WIN_WIN_OPTIONS);
 
 #ifdef CONFIG_ARCH_TEGRA_3x_SOC
@@ -381,10 +378,6 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 			tegra_dc_writel(dc, GLOBAL_ALPHA_ENABLE |
 				win->global_alpha, DC_WIN_GLOBAL_ALPHA);
 #endif
-		tegra_dc_writel(dc, update_mask << 8, DC_CMD_STATE_CONTROL);
-
-		tegra_dc_writel(dc, win->dv, DC_WIN_DV_CONTROL);
-		tegra_dc_writel(dc, update_mask << 8, DC_CMD_STATE_CONTROL);
 
 		win->dirty = no_vsync ? 0 : 1;
 

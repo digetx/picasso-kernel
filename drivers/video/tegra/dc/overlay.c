@@ -761,32 +761,6 @@ static int tegra_overlay_set_lut(struct overlay_client *client,
 	return 0;
 }
 
-static int tegra_overlay_ioctl_set_dv(struct overlay_client *client,
-				      void __user *arg)
-{
-	struct tegra_dc_win *dcwins[DC_N_WINDOWS];
-	struct tegra_dc_dv dv;
-	int i;
-
-	if (copy_from_user(&dv, arg, sizeof(dv)))
-		return -EFAULT;
-
-	for (i = 0; i < DC_N_WINDOWS; i++) {
-		dcwins[i] = tegra_dc_get_window(client->dev->dc, i);
-
-		if (dv.en)
-			dcwins[i]->ppflags |= TEGRA_WIN_PPFLAG_DV_ENABLE;
-		else
-			dcwins[i]->ppflags &= ~TEGRA_WIN_PPFLAG_DV_ENABLE;
-
-		dcwins[i]->dv = (dv.b << 16) | (dv.g << 8) | dv.r;
-	}
-
-	tegra_dc_update_windows(dcwins, DC_N_WINDOWS);
-
-	return 0;
-}
-
 /* File operations */
 static int tegra_overlay_open(struct inode *inode, struct file *filp)
 {
@@ -888,9 +862,6 @@ static long tegra_overlay_ioctl(struct file *filp, unsigned int cmd,
 
 		return tegra_overlay_set_lut(client, &args);
 	}
-	case TEGRA_OVERLAY_IOCTL_SET_DV:
-		err = tegra_overlay_ioctl_set_dv(client, uarg);
-		break;
 	default:
 		return -ENOTTY;
 	}

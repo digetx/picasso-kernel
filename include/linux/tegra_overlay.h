@@ -76,13 +76,6 @@ struct tegra_dc_ext_lut {
 	__u16 *b;         /* array of 16-bit blue values, 0 to reset */
 };
 
-struct tegra_dc_dv {
-	__u8 r;
-	__u8 g;
-	__u8 b;
-	__u8 en;
-};
-
 #define TEGRA_DC_EXT_LUT_FLAGS_FBOVERRIDE 0x01
 
 #define TEGRA_OVERLAY_IOCTL_MAGIC		'O'
@@ -92,9 +85,8 @@ struct tegra_dc_dv {
 #define TEGRA_OVERLAY_IOCTL_FLIP		_IOW(TEGRA_OVERLAY_IOCTL_MAGIC, 0x42, struct tegra_overlay_flip_args)
 #define TEGRA_OVERLAY_IOCTL_SET_NVMAP_FD	_IOW(TEGRA_OVERLAY_IOCTL_MAGIC, 0x43, __u32)
 #define TEGRA_OVERLAY_IOCTL_SET_LUT		_IOW(TEGRA_OVERLAY_IOCTL_MAGIC, 0x44, struct tegra_dc_ext_lut)
-#define TEGRA_OVERLAY_IOCTL_SET_DV		_IOW(TEGRA_OVERLAY_IOCTL_MAGIC, 0x45, struct tegra_dc_dv)
 
 #define TEGRA_OVERLAY_IOCTL_MIN_NR		_IOC_NR(TEGRA_OVERLAY_IOCTL_OPEN_WINDOW)
-#define TEGRA_OVERLAY_IOCTL_MAX_NR		_IOC_NR(TEGRA_OVERLAY_IOCTL_SET_DV)
+#define TEGRA_OVERLAY_IOCTL_MAX_NR		_IOC_NR(TEGRA_OVERLAY_IOCTL_SET_LUT)
 
 #endif
