@@ -718,7 +718,7 @@ static int set_lut_channel(u16 *channel_from_user,
 			return 1;
 
 		for (i = 0; i < len; i++)
-			channel_to[start+i] = lut16bpp[i];
+			channel_to[start+i] = lut16bpp[i] >> 8;
 	} else {
 		for (i = 0; i < len; i++)
 			channel_to[start+i] = start+i;
