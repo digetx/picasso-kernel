@@ -159,8 +159,6 @@ static void __pass_event(struct evdev_client *client,
 
 	if (event->type == EV_SYN && event->code == SYN_REPORT) {
 		client->packet_head = client->head;
-		if (client->use_wake_lock)
-			wake_lock(&client->wake_lock);
 		kill_fasync(&client->fasync, SIGIO, POLL_IN);
 	}
 }
