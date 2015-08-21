@@ -61,6 +61,11 @@ config ANDROID_LOGGER
 	  optimized writes. This optimization avoids logging having too
 	  much overhead in the system.
 
+config ANDROID_RAM_CONSOLE
+	bool "Android RAM buffer console"
+	depends on !S390 && !UML && HAVE_MEMBLOCK && PSTORE_RAM=y
+	default n
+
 config ANDROID_TIMED_OUTPUT
 	bool "Timed output class driver"
 	default y
