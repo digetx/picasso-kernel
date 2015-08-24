@@ -22,6 +22,11 @@
 		reg = <0x00000000 0x40000000>;
 	};
 
+	ram-console {
+		compatible = "android,ram-console";
+		reg = <0x3FF00000 0x00100000>;
+	};
+
 	nvmap {
 		compatible = "nvidia,tegra-nvmap";
 		#address-cells = <1>;
