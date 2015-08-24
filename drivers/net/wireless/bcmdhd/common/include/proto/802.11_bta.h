@@ -1,6 +1,5 @@
 /*
- * Minimal debug/trace/assert driver definitions for
- * Broadcom 802.11 Networking Adapter.
+ * BT-AMP (BlueTooth Alternate Mac and Phy) 802.11 PAL (Protocol Adaptation Layer)
  *
  * Copyright (C) 1999-2013, Broadcom Corporation
  * 
@@ -22,42 +21,25 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_dbg.h 376019 2012-12-21 01:00:06Z $
- */
+ * $Id: 802.11_bta.h 382882 2013-02-04 23:24:31Z $
+*/
 
+#ifndef _802_11_BTA_H_
+#define _802_11_BTA_H_
 
-#ifndef _wl_dbg_h_
-#define _wl_dbg_h_
+#define BT_SIG_SNAP_MPROT		"\xAA\xAA\x03\x00\x19\x58"
 
-/* wl_msg_level is a bit vector with defs in wlioctl.h */
-extern uint32 wl_msg_level;
-extern uint32 wl_msg_level2;
+/* BT-AMP 802.11 PAL Protocols */
+#define BTA_PROT_L2CAP				1
+#define	BTA_PROT_ACTIVITY_REPORT		2
+#define BTA_PROT_SECURITY			3
+#define BTA_PROT_LINK_SUPERVISION_REQUEST	4
+#define BTA_PROT_LINK_SUPERVISION_REPLY		5
 
-#define WL_TIMESTAMP()
-
-#if 0 && (VERSION_MAJOR > 9)
-#include <IOKit/apple80211/IO8Log.h>
-#define WL_PRINT(args)		do { printf args; IO8Log args; } while (0)
-#else
-#define WL_PRINT(args)		do { WL_TIMESTAMP(); printf args; } while (0)
-#endif
-
-
-/* To disable a message completely ... until you need it again */
-#define WL_NONE(args)
-
-#define	WL_ERROR(args)
-#define	WL_TRACE(args)
-#define WL_APSTA_UPDN(args)
-#define WL_APSTA_RX(args)
-#ifdef WLMSG_WSEC
-#define WL_WSEC(args)		WL_PRINT(args)
-#define WL_WSEC_DUMP(args)	WL_PRINT(args)
-#else
-#define WL_WSEC(args)
-#define WL_WSEC_DUMP(args)
-#endif
-
-extern uint32 wl_msg_level;
-extern uint32 wl_msg_level2;
-#endif /* _wl_dbg_h_ */
+/* BT-AMP 802.11 PAL AMP_ASSOC Type IDs */
+#define BTA_TYPE_ID_MAC_ADDRESS			1
+#define BTA_TYPE_ID_PREFERRED_CHANNELS		2
+#define BTA_TYPE_ID_CONNECTED_CHANNELS		3
+#define BTA_TYPE_ID_CAPABILITIES		4
+#define BTA_TYPE_ID_VERSION			5
+#endif /* _802_11_bta_h_ */
