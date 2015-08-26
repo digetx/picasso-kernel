@@ -1214,11 +1214,16 @@ void *wifi_get_country_code(char *ccode, u32 flags)
 }
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)) */
 
+#include <linux/mmc/host.h>
+extern struct mmc_host *wifi_host;
+
 static int wifi_set_carddetect(int on)
 {
 	DHD_ERROR(("%s = %d\n", __FUNCTION__, on));
 	if (wifi_control_data && wifi_control_data->set_carddetect) {
 		wifi_control_data->set_carddetect(on);
+	} else if (wifi_host && on) {
+		mmc_detect_change(wifi_host, 0);
 	}
 	return 0;
 }

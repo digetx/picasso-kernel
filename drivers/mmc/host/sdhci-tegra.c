@@ -42,6 +42,8 @@
 #define NVQUIRK_DISABLE_SDR104		BIT(4)
 #define NVQUIRK_DISABLE_DDR50		BIT(5)
 
+struct mmc_host *wifi_host;
+
 struct sdhci_tegra_soc_data {
 	const struct sdhci_pltfm_data *pdata;
 	u32 nvquirks;
@@ -221,6 +223,12 @@ static int sdhci_tegra_parse_dt(struct device *dev)
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
 
 	tegra_host->power_gpio = of_get_named_gpio(np, "power-gpios", 0);
+
+	if (of_property_read_bool(np, "wifi-host")) {
+		host->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
+		wifi_host = host->mmc;
+	}
+
 	return mmc_of_parse(host->mmc);
 }
 
