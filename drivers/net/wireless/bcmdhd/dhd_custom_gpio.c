@@ -48,12 +48,12 @@ extern  void bcm_wlan_power_on(int);
 int wifi_set_power(int on, unsigned long msec);
 int wifi_get_irq_number(unsigned long *irq_flags_ptr);
 int wifi_get_mac_addr(unsigned char *buf);
-void *wifi_get_country_code(char *ccode);
+void *wifi_get_country_code(char *ccode, u32 flags);
 #else
 int wifi_set_power(int on, unsigned long msec) { return -1; }
 int wifi_get_irq_number(unsigned long *irq_flags_ptr) { return -1; }
 int wifi_get_mac_addr(unsigned char *buf) { return -1; }
-void *wifi_get_country_code(char *ccode) { return NULL; }
+void *wifi_get_country_code(char *ccode, u32 flags) { return NULL; }
 #endif /* CONFIG_WIFI_CONTROL_FUNC */
 #endif 
 
@@ -260,7 +260,7 @@ void get_customized_country_code(char *country_iso_code, wl_country_t *cspec)
 	if (!cspec)
 		return;
 
-	cloc_ptr = wifi_get_country_code(country_iso_code);
+	cloc_ptr = wifi_get_country_code(country_iso_code, 0);
 	if (cloc_ptr) {
 		strlcpy(cspec->ccode, cloc_ptr->custom_locale, WLC_CNTRY_BUF_SZ);
 		cspec->rev = cloc_ptr->custom_locale_rev;

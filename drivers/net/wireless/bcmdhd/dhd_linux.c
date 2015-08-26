@@ -520,9 +520,9 @@ module_param(dhd_pktgen_len, uint, 0);
 #endif /* DHD_DEBUG */
 
 static char dhd_version[] = "Dongle Host Driver, version " EPI_VERSION_STR
-#ifdef DHD_DEBUG
-"\nCompiled in " SRCBASE " on " __DATE__ " at " __TIME__
-#endif
+// #ifdef DHD_DEBUG
+// "\nCompiled in " SRCBASE " on " __DATE__ " at " __TIME__
+// #endif
 ;
 static void dhd_net_if_lock_local(dhd_info_t *dhd);
 static void dhd_net_if_unlock_local(dhd_info_t *dhd);
@@ -4906,13 +4906,13 @@ dhd_module_init(void)
 	 * It's needed to make sync up exit from dhd insmod  and
 	 * Kernel MMC sdio device callback registration
 	 */
-	if ((down_timeout(&dhd_registration_sem,
-		msecs_to_jiffies(DHD_REGISTRATION_TIMEOUT)) != 0) ||
-		(dhd_registration_check != TRUE)) {
-		error = -ENODEV;
-		DHD_ERROR(("%s: sdio_register_driver timeout or error \n", __FUNCTION__));
-		goto fail_2;
-	}
+// 	if ((down_timeout(&dhd_registration_sem,
+// 		msecs_to_jiffies(DHD_REGISTRATION_TIMEOUT)) != 0) ||
+// 		(dhd_registration_check != TRUE)) {
+// 		error = -ENODEV;
+// 		DHD_ERROR(("%s: sdio_register_driver timeout or error \n", __FUNCTION__));
+// 		goto fail_2;
+// 	}
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) */
 #if defined(WL_CFG80211)
 	wl_android_post_init();

@@ -1202,13 +1202,13 @@ int wifi_get_mac_addr(unsigned char *buf)
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)) */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
-void *wifi_get_country_code(char *ccode)
+void *wifi_get_country_code(char *ccode, u32 flags)
 {
 	DHD_TRACE(("%s\n", __FUNCTION__));
 	if (!ccode)
 		return NULL;
 	if (wifi_control_data && wifi_control_data->get_country_code) {
-		return wifi_control_data->get_country_code(ccode);
+		return wifi_control_data->get_country_code(ccode, flags);
 	}
 	return NULL;
 }
@@ -1252,6 +1252,8 @@ static int wifi_probe(struct platform_device *pdev)
 
 	if (!wifi_ctrl) {
 		regulator = regulator_get(&pdev->dev, "wlreg_on");
+		if (PTR_ERR(regulator) == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
 		if (IS_ERR(regulator))
 			return PTR_ERR(regulator);
 		wifi_regulator = regulator;

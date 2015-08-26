@@ -279,7 +279,7 @@ static s32 wl_cfg80211_join_ibss(struct wiphy *wiphy, struct net_device *dev,
 static s32 wl_cfg80211_leave_ibss(struct wiphy *wiphy,
 	struct net_device *dev);
 static s32 wl_cfg80211_get_station(struct wiphy *wiphy,
-	struct net_device *dev, u8 *mac,
+	struct net_device *dev, const u8 *mac,
 	struct station_info *sinfo);
 static s32 wl_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 	struct net_device *dev, bool enabled,
@@ -321,7 +321,7 @@ static s32 wl_cfg80211_resume(struct wiphy *wiphy);
 static int wl_cfg80211_mgmt_tx_cancel_wait(struct wiphy *wiphy,
 	bcm_struct_cfgdev *cfgdev, u64 cookie);
 static s32 wl_cfg80211_del_station(struct wiphy *wiphy,
-	struct net_device *ndev, u8* mac_addr);
+	struct net_device *ndev, const u8* mac_addr);
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)
 static s32 wl_cfg80211_suspend(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
 #else
@@ -338,7 +338,7 @@ static s32 wl_notify_escan_complete(struct wl_priv *wl,
 	struct net_device *ndev, bool aborted, bool fw_abort);
 #if LINUX_VERSION_CODE > KERNEL_VERSION(3, 2, 0)
 static s32 wl_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
-	u8 *peer, enum nl80211_tdls_operation oper);
+	const u8 *peer, enum nl80211_tdls_operation oper);
 #endif /* LINUX_VERSION_CODE > KERNEL_VERSION(3, 2, 0) */
 static int wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev);
 
@@ -1292,7 +1292,7 @@ wl_cfg80211_add_virtual_iface(struct wiphy *wiphy,
 					dhd->plat_enable((void *)dhd);
 #endif /* PROP_TXSTATUS_VSDB */
 				/* reinitialize completion to clear previous count */
-				INIT_COMPLETION(wl->iface_disable);
+				reinit_completion(&wl->iface_disable);
 			} else {
 				/* put back the rtnl_lock again */
 				if (rollback_lock)
@@ -1772,7 +1772,7 @@ static void wl_scan_prep(struct wl_scan_params *params, struct cfg80211_scan_req
 			/* SKIP DFS channels for Secondary interface */
 			if ((wl->escan_info.ndev != wl_to_prmry_ndev(wl)) &&
 				(request->channels[i]->flags &
-				(IEEE80211_CHAN_RADAR | IEEE80211_CHAN_PASSIVE_SCAN)))
+				(IEEE80211_CHAN_RADAR | IEEE80211_CHAN_NO_IR)))
 				continue;
 
 			if (request->channels[i]->band == IEEE80211_BAND_2GHZ) {
@@ -2024,7 +2024,7 @@ wl_run_escan(struct wl_priv *wl, struct net_device *ndev,
 					/* ignore DFS channels */
 					if (request->channels[i]->flags &
 						(IEEE80211_CHAN_RADAR
-						| IEEE80211_CHAN_PASSIVE_SCAN))
+						| IEEE80211_CHAN_NO_IR))
 						continue;
 
 					for (j = 0; j < n_valid_chan; j++) {
@@ -3902,7 +3902,7 @@ wl_cfg80211_config_default_mgmt_key(struct wiphy *wiphy,
 
 static s32
 wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
-	u8 *mac, struct station_info *sinfo)
+	const u8 *mac, struct station_info *sinfo)
 {
 	struct wl_priv *wl = wiphy_priv(wiphy);
 	scb_val_t scb_val;
@@ -4984,16 +4984,11 @@ exit:
 #if defined(WL_CFG80211_P2P_DEV_IF)
 static s32
 wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
-	struct ieee80211_channel *channel, bool offchan,
-	unsigned int wait, const u8* buf, size_t len, bool no_cck,
-	bool dont_wait_for_ack, u64 *cookie)
+	struct cfg80211_mgmt_tx_params *params, u64 *cookie)
 #else
 static s32
 wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
-	struct ieee80211_channel *channel, bool offchan,
-	enum nl80211_channel_type channel_type,
-	bool channel_type_valid, unsigned int wait,
-	const u8* buf, size_t len,
+	struct cfg80211_mgmt_tx_params *params,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
 	bool no_cck,
 #endif
@@ -5008,6 +5003,9 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 	scb_val_t scb_val;
 	const struct ieee80211_mgmt *mgmt;
 	struct wl_priv *wl = wiphy_priv(wiphy);
+	struct ieee80211_channel *channel = params->chan;
+	const u8 *buf = params->buf;
+	size_t len = params->len;
 	struct net_device *dev = NULL;
 	s32 err = BCME_OK;
 	s32 bssidx = 0;
@@ -6003,7 +6001,7 @@ static s32
 wl_cfg80211_del_station(
 	struct wiphy *wiphy,
 	struct net_device *ndev,
-	u8* mac_addr)
+	const u8* mac_addr)
 {
 	struct net_device *dev;
 	struct wl_priv *wl = wiphy_priv(wiphy);
@@ -6623,6 +6621,14 @@ wl_cfg80211_reg_notifier(
 }
 #endif /* CONFIG_CFG80211_INTERNAL_REGDB */
 
+static const struct wiphy_wowlan_support wowlan_support = {
+	.flags = WIPHY_WOWLAN_MAGIC_PKT | WIPHY_WOWLAN_DISCONNECT,
+	.n_patterns = 8,
+	.pattern_max_len = 128,
+	.pattern_min_len = 1,
+	.max_pkt_offset = 1500,
+};
+
 static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev, void *data)
 {
 	s32 err = 0;
@@ -6728,7 +6734,7 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	wdev->wiphy->flags |= WIPHY_FLAG_SUPPORTS_TDLS;
 #endif
 	WL_DBG(("Registering custom regulatory)\n"));
-	wdev->wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
+	wdev->wiphy->regulatory_flags |= REGULATORY_CUSTOM_REG;
 	wiphy_apply_custom_regulatory(wdev->wiphy, &brcm_regdom);
 	/* Now we can register wiphy with cfg80211 module */
 	err = wiphy_register(wdev->wiphy);
@@ -6741,6 +6747,8 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	KERNEL_VERSION(3, 3, 0))) && defined(WL_IFACE_COMB_NUM_CHANNELS)
 	wdev->wiphy->flags &= ~WIPHY_FLAG_ENFORCE_COMBINATIONS;
 #endif /* ((LINUX_VER >= 3.0) && (LINUX_VER <= 3.3)) && WL_IFACE_COMB_NUM_CHANNELS */
+
+	wdev->wiphy->wowlan = &wowlan_support;
 
 	return err;
 }
@@ -7146,6 +7154,8 @@ static s32
 wl_notify_connect_status_ibss(struct wl_priv *wl, struct net_device *ndev,
 	const wl_event_msg_t *e, void *data)
 {
+	struct wiphy *wiphy = wl_to_wiphy(wl);
+	struct ieee80211_channel *chan;
 	s32 err = 0;
 	u32 event = ntoh32(e->event_type);
 	u16 flags = ntoh16(e->flags);
@@ -7160,6 +7170,7 @@ wl_notify_connect_status_ibss(struct wl_priv *wl, struct net_device *ndev,
 	}
 	if (event == WLC_E_JOIN || event == WLC_E_START ||
 		(event == WLC_E_LINK && (flags == WLC_EVENT_MSG_LINK))) {
+		chan = ieee80211_get_channel(wiphy, wl->channel);
 		if (wl_get_drv_status(wl, CONNECTED, ndev)) {
 			/* ROAM or Redundant */
 			u8 *cur_bssid = wl_read_prof(wl, ndev, WL_PROF_BSSID);
@@ -7173,7 +7184,7 @@ wl_notify_connect_status_ibss(struct wl_priv *wl, struct net_device *ndev,
 			wl_get_assoc_ies(wl, ndev);
 			wl_update_prof(wl, ndev, NULL, (void *)&e->addr, WL_PROF_BSSID);
 			wl_update_bss_info(wl, ndev);
-			cfg80211_ibss_joined(ndev, (s8 *)&e->addr, GFP_KERNEL);
+			cfg80211_ibss_joined(ndev, (s8 *)&e->addr, chan, GFP_KERNEL);
 		}
 		else {
 			/* New connection */
@@ -7182,7 +7193,7 @@ wl_notify_connect_status_ibss(struct wl_priv *wl, struct net_device *ndev,
 			wl_get_assoc_ies(wl, ndev);
 			wl_update_prof(wl, ndev, NULL, (void *)&e->addr, WL_PROF_BSSID);
 			wl_update_bss_info(wl, ndev);
-			cfg80211_ibss_joined(ndev, (s8 *)&e->addr, GFP_KERNEL);
+			cfg80211_ibss_joined(ndev, (s8 *)&e->addr, chan, GFP_KERNEL);
 			wl_set_drv_status(wl, CONNECTED, ndev);
 			active = true;
 			wl_update_prof(wl, ndev, NULL, (void *)&active, WL_PROF_ACT);
@@ -7658,7 +7669,7 @@ wl_bss_connect_done(struct wl_priv *wl, struct net_device *ndev,
 #endif /* ROAM_AP_ENV_DETECTION */
 			if (ndev != wl_to_prmry_ndev(wl)) {
 				/* reinitialize completion to clear previous count */
-				INIT_COMPLETION(wl->iface_disable);
+				reinit_completion(&wl->iface_disable);
 			}
 		}
 		cfg80211_connect_result(ndev,
@@ -8624,44 +8635,44 @@ wl_cfg80211_netdev_notifier_call(struct notifier_block * nb,
 	struct net_device *dev = ndev;
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct wl_priv *wl = wlcfg_drv_priv;
-	int refcnt = 0;
+// 	int refcnt = 0;
 
 	WL_DBG(("Enter \n"));
 	if (!wdev || !wl || dev == wl_to_prmry_ndev(wl))
 		return NOTIFY_DONE;
 	switch (state) {
-		case NETDEV_DOWN:
-		{
-			int max_wait_timeout = 2;
-			int max_wait_count = 100;
-			unsigned long limit = jiffies + max_wait_timeout * HZ;
-			while (work_pending(&wdev->cleanup_work)) {
-				if (refcnt%5 == 0) {
-					WL_ERR(("[NETDEV_DOWN] wait for "
-						"complete of cleanup_work"
-						" (%d th)\n", refcnt));
-				}
-				if (!time_before(jiffies, limit)) {
-					WL_ERR(("[NETDEV_DOWN] cleanup_work"
-						" of CFG80211 is not"
-						" completed in %d sec\n",
-						max_wait_timeout));
-					break;
-				}
-				if (refcnt >= max_wait_count) {
-					WL_ERR(("[NETDEV_DOWN] cleanup_work"
-						" of CFG80211 is not"
-						" completed in %d loop\n",
-						max_wait_count));
-					break;
-				}
-				set_current_state(TASK_INTERRUPTIBLE);
-				schedule_timeout(100);
-				set_current_state(TASK_RUNNING);
-				refcnt++;
-			}
-			break;
-		}
+// 		case NETDEV_DOWN:
+// 		{
+// 			int max_wait_timeout = 2;
+// 			int max_wait_count = 100;
+// 			unsigned long limit = jiffies + max_wait_timeout * HZ;
+// 			while (work_pending(&wdev->cleanup_work)) {
+// 				if (refcnt%5 == 0) {
+// 					WL_ERR(("[NETDEV_DOWN] wait for "
+// 						"complete of cleanup_work"
+// 						" (%d th)\n", refcnt));
+// 				}
+// 				if (!time_before(jiffies, limit)) {
+// 					WL_ERR(("[NETDEV_DOWN] cleanup_work"
+// 						" of CFG80211 is not"
+// 						" completed in %d sec\n",
+// 						max_wait_timeout));
+// 					break;
+// 				}
+// 				if (refcnt >= max_wait_count) {
+// 					WL_ERR(("[NETDEV_DOWN] cleanup_work"
+// 						" of CFG80211 is not"
+// 						" completed in %d loop\n",
+// 						max_wait_count));
+// 					break;
+// 				}
+// 				set_current_state(TASK_INTERRUPTIBLE);
+// 				schedule_timeout(100);
+// 				set_current_state(TASK_RUNNING);
+// 				refcnt++;
+// 			}
+// 			break;
+// 		}
 
 		case NETDEV_UNREGISTER:
 			/* after calling list_del_rcu(&wdev->list) */
@@ -10021,10 +10032,10 @@ static int wl_construct_reginfo(struct wl_priv *wl, s32 bw_cap)
 						if (channel & WL_CHAN_RADAR)
 							band_chan_arr[index].flags |=
 								(IEEE80211_CHAN_RADAR |
-								IEEE80211_CHAN_NO_IBSS);
+								IEEE80211_CHAN_NO_IR);
 						if (channel & WL_CHAN_PASSIVE)
 							band_chan_arr[index].flags |=
-								IEEE80211_CHAN_PASSIVE_SCAN;
+								IEEE80211_CHAN_NO_IR;
 					} else if (err == BCME_UNSUPPORTED) {
 						dfs_radar_disabled = TRUE;
 						WL_ERR(("does not support per_chan_info\n"));
@@ -10653,7 +10664,7 @@ wl_tdls_event_handler(struct wl_priv *wl, bcm_struct_cfgdev *cfgdev,
 #if LINUX_VERSION_CODE > KERNEL_VERSION(3, 2, 0)
 static s32
 wl_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
-	u8 *peer, enum nl80211_tdls_operation oper)
+	const u8 *peer, enum nl80211_tdls_operation oper)
 {
 	s32 ret = 0;
 #ifdef WLTDLS
