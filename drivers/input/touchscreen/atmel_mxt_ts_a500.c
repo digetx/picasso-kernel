@@ -1642,12 +1642,9 @@ static struct mxt_platform_data *mxt_parse_dt(struct i2c_client *client,
 	if (!of_property_read_u32(of_node, "orient", &val))
 		pdata->orient = val;
 
-	if (IS_ENABLED(CONFIG_ANDROID) &&
-			of_property_read_bool(of_node, "android-evdev")) {
+	if (IS_ENABLED(CONFIG_ANDROID)) {
 		data->android = true;
-
-		if (of_property_read_bool(of_node, "multislot-proto"))
-			data->use_multislot_proto = true;
+		data->use_multislot_proto = true;
 	}
 
 	prop = of_find_property(of_node, "config", &length);
