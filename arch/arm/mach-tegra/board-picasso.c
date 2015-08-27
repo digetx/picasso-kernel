@@ -67,6 +67,6 @@ void __init tegra_picasso_rfkill_init(void)
 	gpiod_add_lookup_table(&wifi_gpio_lookup);
 	gpiod_add_lookup_table(&bluetooth_gpio_lookup);
 
-	platform_device_register(&wifi_rfkill_device);
+// 	platform_device_register(&wifi_rfkill_device);
 	platform_device_register(&bluetooth_rfkill_device);
 }

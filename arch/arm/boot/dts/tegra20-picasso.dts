@@ -690,6 +690,17 @@
 			regulator-always-on;
 			regulator-boot-on;
 		};
+
+		wlreg: regulator@6 {
+			compatible = "regulator-fixed";
+			reg = <6>;
+			regulator-name = "wlreg_on";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			regulator-enable-ramp-delay = <300000>;
+			gpio = <&gpio TEGRA_GPIO(K, 6) GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+		};
 	};
 
 	i2c@7000d000 {
@@ -837,7 +848,16 @@
 		bus-width = <4>;
 		power-gpios = <&gpio TEGRA_GPIO(K, 5) GPIO_ACTIVE_HIGH>;
 		keep-power-in-suspend;
-		broken-cd;
+		wifi-host;
+	};
+
+	wifi {
+		status = "okay";
+		compatible = "android,bcmdhd_wlan";
+		interrupt-parent = <&gpio>;
+		interrupts = <TEGRA_GPIO(S, 0) IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "bcmdhd_wlan_irq";
+		wlreg_on-supply = <&wlreg>;
 	};
 
 	sdhci@c8000400 {
