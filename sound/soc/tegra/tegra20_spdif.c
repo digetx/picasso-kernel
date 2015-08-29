@@ -34,6 +34,8 @@
 #include <sound/soc.h>
 #include <sound/dmaengine_pcm.h>
 
+#include <mach/hdmi-audio.h>
+
 #include "tegra20_spdif.h"
 
 #define DRV_NAME "tegra20-spdif"
@@ -68,7 +70,7 @@ static int tegra20_spdif_hw_params(struct snd_pcm_substream *substream,
 	struct device *dev = dai->dev;
 	struct tegra20_spdif *spdif = snd_soc_dai_get_drvdata(dai);
 	unsigned int mask = 0, val = 0;
-	int ret, spdifclock;
+	int ret, srate, spdifclock;
 
 	mask |= TEGRA20_SPDIF_CTRL_PACK |
 		TEGRA20_SPDIF_CTRL_BIT_MODE_MASK;
@@ -83,7 +85,9 @@ static int tegra20_spdif_hw_params(struct snd_pcm_substream *substream,
 
 	regmap_update_bits(spdif->regmap, TEGRA20_SPDIF_CTRL, mask, val);
 
-	switch (params_rate(params)) {
+	srate = params_rate(params);
+
+	switch (srate) {
 	case 32000:
 		spdifclock = 4096000;
 		break;
@@ -112,6 +116,16 @@ static int tegra20_spdif_hw_params(struct snd_pcm_substream *substream,
 	ret = clk_set_rate(spdif->clk_spdif_out, spdifclock);
 	if (ret) {
 		dev_err(dev, "Can't set SPDIF clock rate: %d\n", ret);
+		return ret;
+	}
+
+	regmap_update_bits(spdif->regmap, TEGRA20_SPDIF_DATA_FIFO_CSR,
+					TEGRA20_SPDIF_DATA_FIFO_CSR_TX_ATN_LVL_MASK,
+					TEGRA20_SPDIF_DATA_FIFO_CSR_TX_ATN_LVL_TU4_WORD_FULL);
+
+	ret = tegra_hdmi_setup_audio_freq_source(srate, SPDIF);
+	if (ret) {
+		dev_err(dev, "Can't set HDMI audio freq source: %d\n", ret);
 		return ret;
 	}
 
@@ -265,7 +279,8 @@ static const struct regmap_config tegra20_spdif_regmap_config = {
 static int tegra20_spdif_platform_probe(struct platform_device *pdev)
 {
 	struct tegra20_spdif *spdif;
-	struct resource *mem, *memregion, *dmareq;
+	struct resource *mem, *memregion;
+	struct clk *parent_clk;
 	void __iomem *regs;
 	int ret;
 
@@ -288,13 +303,6 @@ static int tegra20_spdif_platform_probe(struct platform_device *pdev)
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
 		dev_err(&pdev->dev, "No memory resource\n");
-		ret = -ENODEV;
-		goto err_clk_put;
-	}
-
-	dmareq = platform_get_resource(pdev, IORESOURCE_DMA, 0);
-	if (!dmareq) {
-		dev_err(&pdev->dev, "No DMA resource\n");
 		ret = -ENODEV;
 		goto err_clk_put;
 	}
@@ -325,7 +333,21 @@ static int tegra20_spdif_platform_probe(struct platform_device *pdev)
 	spdif->playback_dma_data.addr = mem->start + TEGRA20_SPDIF_DATA_OUT;
 	spdif->playback_dma_data.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 	spdif->playback_dma_data.maxburst = 4;
-	spdif->playback_dma_data.slave_id = dmareq->start;
+
+	parent_clk = clk_get(&pdev->dev, "parent");
+	if (IS_ERR(parent_clk)) {
+		dev_err(&pdev->dev, "Can't get parent clk\n");
+		ret = PTR_ERR(parent_clk);
+		goto err_clk_put;
+	}
+
+	ret = clk_set_parent(spdif->clk_spdif_out, parent_clk);
+	if (ret) {
+		dev_err(&pdev->dev, "Can't set parent clk\n");
+		goto err_clk_put;
+	}
+
+	clk_put(parent_clk);
 
 	pm_runtime_enable(&pdev->dev);
 	if (!pm_runtime_enabled(&pdev->dev)) {
@@ -384,11 +406,17 @@ static const struct dev_pm_ops tegra20_spdif_pm_ops = {
 			   tegra20_spdif_runtime_resume, NULL)
 };
 
+static const struct of_device_id tegra20_spdif_of_match[] = {
+	{ .compatible = "nvidia,tegra20-spdif", },
+	{},
+};
+
 static struct platform_driver tegra20_spdif_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
 		.pm = &tegra20_spdif_pm_ops,
+		.of_match_table = tegra20_spdif_of_match,
 	},
 	.probe = tegra20_spdif_platform_probe,
 	.remove = tegra20_spdif_platform_remove,
@@ -400,3 +428,4 @@ MODULE_AUTHOR("Stephen Warren <swarren@nvidia.com>");
 MODULE_DESCRIPTION("Tegra20 SPDIF ASoC driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:" DRV_NAME);
+MODULE_DEVICE_TABLE(of, tegra20_spdif_of_match);

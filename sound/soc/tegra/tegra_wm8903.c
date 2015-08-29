@@ -98,8 +98,55 @@ static int tegra_wm8903_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static int tegra_spdif_hw_params(struct snd_pcm_substream *substream,
+                                 struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
+	int srate, mclk, min_mclk;
+	int err;
+
+	srate = params_rate(params);
+	switch (srate) {
+	case 11025:
+	case 22050:
+	case 44100:
+	case 88200:
+		mclk = 11289600;
+		break;
+	case 8000:
+	case 16000:
+	case 32000:
+	case 48000:
+	case 64000:
+	case 96000:
+		mclk = 12288000;
+		break;
+	default:
+		return -EINVAL;
+	}
+	min_mclk = 128 * srate;
+
+	err = tegra_asoc_utils_set_rate(&machine->util_data, srate, mclk);
+	if (err < 0) {
+		if (!(machine->util_data.set_mclk % min_mclk))
+			mclk = machine->util_data.set_mclk;
+		else {
+			dev_err(card->dev, "Can't configure clocks\n");
+			return err;
+		}
+	}
+
+	return 0;
+}
+
 static struct snd_soc_ops tegra_wm8903_ops = {
 	.hw_params = tegra_wm8903_hw_params,
+};
+
+static struct snd_soc_ops tegra_spdif_ops = {
+	.hw_params = tegra_spdif_hw_params,
 };
 
 static struct snd_soc_jack tegra_wm8903_hp_jack;
@@ -267,22 +314,30 @@ static int tegra_wm8903_remove(struct snd_soc_card *card)
 	return 0;
 }
 
-static struct snd_soc_dai_link tegra_wm8903_dai = {
-	.name = "WM8903",
-	.stream_name = "WM8903 PCM",
-	.codec_dai_name = "wm8903-hifi",
-	.init = tegra_wm8903_init,
-	.ops = &tegra_wm8903_ops,
-	.dai_fmt = SND_SOC_DAIFMT_I2S |
-		   SND_SOC_DAIFMT_NB_NF |
-		   SND_SOC_DAIFMT_CBS_CFS,
+static struct snd_soc_dai_link tegra_wm8903_dai[] = {
+	{
+		.name = "WM8903",
+		.stream_name = "WM8903 PCM",
+		.codec_dai_name = "wm8903-hifi",
+		.init = tegra_wm8903_init,
+		.ops = &tegra_wm8903_ops,
+		.dai_fmt = SND_SOC_DAIFMT_I2S |
+			SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBS_CFS,
+	},
+	{
+		.name = "S/PDIF",
+		.stream_name = "S/PDIF PCM",
+		.codec_dai_name = "dit-hifi",
+		.ops = &tegra_spdif_ops,
+	},
 };
 
 static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.name = "tegra-wm8903",
 	.owner = THIS_MODULE,
-	.dai_link = &tegra_wm8903_dai,
-	.num_links = 1,
+	.dai_link = tegra_wm8903_dai,
+	.num_links = ARRAY_SIZE(tegra_wm8903_dai),
 	.remove = tegra_wm8903_remove,
 	.controls = tegra_wm8903_controls,
 	.num_controls = ARRAY_SIZE(tegra_wm8903_controls),
@@ -381,25 +436,45 @@ static int tegra_wm8903_driver_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	tegra_wm8903_dai.codec_of_node = of_parse_phandle(np,
+	tegra_wm8903_dai[0].codec_of_node = of_parse_phandle(np,
 						"nvidia,audio-codec", 0);
-	if (!tegra_wm8903_dai.codec_of_node) {
+	if (!tegra_wm8903_dai[0].codec_of_node) {
 		dev_err(&pdev->dev,
 			"Property 'nvidia,audio-codec' missing or invalid\n");
 		ret = -EINVAL;
 		goto err;
 	}
 
-	tegra_wm8903_dai.cpu_of_node = of_parse_phandle(np,
+	tegra_wm8903_dai[0].cpu_of_node = of_parse_phandle(np,
 			"nvidia,i2s-controller", 0);
-	if (!tegra_wm8903_dai.cpu_of_node) {
+	if (!tegra_wm8903_dai[0].cpu_of_node) {
 		dev_err(&pdev->dev,
 			"Property 'nvidia,i2s-controller' missing or invalid\n");
 		ret = -EINVAL;
 		goto err;
 	}
 
-	tegra_wm8903_dai.platform_of_node = tegra_wm8903_dai.cpu_of_node;
+	tegra_wm8903_dai[0].platform_of_node = tegra_wm8903_dai[0].cpu_of_node;
+
+	tegra_wm8903_dai[1].codec_of_node = of_parse_phandle(np,
+						"nvidia,spdif-codec", 0);
+	if (!tegra_wm8903_dai[1].codec_of_node) {
+		dev_err(&pdev->dev,
+			"Property 'nvidia,spdif-codec' missing or invalid\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	tegra_wm8903_dai[1].cpu_of_node = of_parse_phandle(np,
+			"nvidia,spdif-controller", 0);
+	if (!tegra_wm8903_dai[1].cpu_of_node) {
+		dev_err(&pdev->dev,
+			"Property 'nvidia,spdif-controller' missing or invalid\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	tegra_wm8903_dai[1].platform_of_node = tegra_wm8903_dai[1].cpu_of_node;
 
 	ret = tegra_asoc_utils_init(&machine->util_data, &pdev->dev);
 	if (ret)
