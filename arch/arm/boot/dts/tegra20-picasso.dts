@@ -952,6 +952,20 @@
 		status = "okay";
 	};
 
+	spdif_codec: spdif-dit {
+		compatible = "linux,spdif-dit";
+	};
+
+	tegra_spdif: spdif@70002400 {
+		compatible = "nvidia,tegra20-spdif";
+		reg = <0x70002400 0x00000200>;
+		clocks = <&tegra_car TEGRA20_CLK_SPDIF_OUT>,
+			 <&tegra_car TEGRA20_CLK_PLL_A_OUT0>;
+		clock-names = "spdif_out", "parent";
+		dmas = <&apbdma 3>;
+		dma-names = "tx";
+	};
+
 	sound {
 		compatible = "nvidia,tegra-audio-wm8903-picasso",
 			     "nvidia,tegra-audio-wm8903";
@@ -971,6 +985,9 @@
 
 		nvidia,i2s-controller = <&tegra_i2s1>;
 		nvidia,audio-codec = <&wm8903>;
+
+		nvidia,spdif-controller = <&tegra_spdif>;
+		nvidia,spdif-codec = <&spdif_codec>;
 
 		nvidia,spkr-en-gpios = <&wm8903 2 GPIO_ACTIVE_HIGH>;
 		nvidia,hp-det-gpios = <&gpio TEGRA_GPIO(W, 2) GPIO_ACTIVE_HIGH>;
