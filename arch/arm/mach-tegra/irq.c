@@ -255,6 +255,19 @@ static void tegra114_gic_cpu_pm_registration(void)
 static void tegra114_gic_cpu_pm_registration(void) { }
 #endif
 
+#ifdef CONFIG_TEGRA_AVP
+void tegra_init_legacy_irq_cop(void)
+{
+	int i;
+
+	for (i = 0; i < num_ictlrs; i++) {
+		void __iomem *ictlr = ictlr_reg_base[i];
+		writel(~0, ictlr + ICTLR_COP_IER_CLR);
+		writel(0, ictlr + ICTLR_COP_IEP_CLASS);
+	}
+}
+#endif
+
 void __init tegra_init_irq(void)
 {
 	int i;
