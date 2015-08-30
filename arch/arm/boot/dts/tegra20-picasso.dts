@@ -173,6 +173,22 @@
 		};
 	};
 
+	tegra-avp {
+		compatible = "nvidia,tegra20-avp";
+		interrupts = <GIC_SPI 4 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "mbox_from_avp_pending";
+		clocks = <&tegra_car TEGRA20_CLK_COP>,
+			 <&tegra_car TEGRA20_CLK_VCP>,
+			 <&tegra_car TEGRA20_CLK_BSEA>,
+			 <&tegra_car TEGRA20_CLK_VDE>;
+		clock-names = "cop", "vcp", "bsea", "vde";
+		resets = <&tegra_car TEGRA20_CLK_COP>,
+			 <&tegra_car TEGRA20_CLK_VCP>,
+			 <&tegra_car TEGRA20_CLK_BSEA>,
+			 <&tegra_car TEGRA20_CLK_VDE>;
+		reset-names = "cop", "vcp", "bsea", "vde";
+	};
+
 	pinmux@70000014 {
 		pinctrl-names = "default";
 		pinctrl-0 = <&state_default>;
