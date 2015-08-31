@@ -680,7 +680,7 @@
 			regulator-max-microvolt = <3300000>;
 			gpio = <&gpio TEGRA_GPIO(D, 1) GPIO_ACTIVE_HIGH>;
 			enable-active-high;
-			regulator-boot-on;
+			regulator-always-on;
 		};
 
 		vbus1_reg: regulator@4 {
