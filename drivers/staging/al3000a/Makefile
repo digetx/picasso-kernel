@@ -1,0 +1,1 @@
+obj-$(CONFIG_AL3000A_LIGHT_SENSOR)	+= al3000a.o

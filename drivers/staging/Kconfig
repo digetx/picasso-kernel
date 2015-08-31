@@ -27,6 +27,8 @@ source "drivers/staging/acer_ec/Kconfig"
 
 source "drivers/staging/mpu3050/Kconfig"
 
+source "drivers/staging/al3000a/Kconfig"
+
 source "drivers/staging/slicoss/Kconfig"
 
 source "drivers/staging/wlan-ng/Kconfig"

@@ -5,6 +5,7 @@ obj-$(CONFIG_STAGING)		+= staging.o
 
 obj-$(CONFIG_MFD_EC_A500)	+= acer_ec/
 obj-y				+= mpu3050/inv_330/
+obj-y				+= al3000a/
 
 obj-y				+= media/
 obj-$(CONFIG_SLICOSS)		+= slicoss/
