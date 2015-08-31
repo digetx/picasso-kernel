@@ -189,6 +189,18 @@
 		reset-names = "cop", "vcp", "bsea", "vde";
 	};
 
+	tegra-camera {
+		compatible = "nvidia,tegra20-camera";
+		clocks = <&tegra_car TEGRA20_CLK_ISP>,
+			 <&tegra_car TEGRA20_CLK_VI>,
+			 <&tegra_car TEGRA20_CLK_VI_SENSOR>,
+			 <&tegra_car TEGRA20_CLK_CSUS>,
+			 <&tegra_car TEGRA20_CLK_CSI>;
+		clock-names = "isp", "vi", "vi_sensor", "csus", "csi";
+		power-gpio = <&gpio TEGRA_GPIO(V, 4) GPIO_ACTIVE_HIGH>;
+		vcsi-supply = <&avdd_vdac_reg>;
+	};
+
 	pinmux@70000014 {
 		pinctrl-names = "default";
 		pinctrl-0 = <&state_default>;
@@ -618,6 +630,37 @@
 	i2c@7000c500 {
 		status = "okay";
 		clock-frequency = <400000>;
+
+		camera-front@3c {
+			compatible = "aptina,mt9d115";
+			reg = <0x3c>;
+			pwdn-gpio = <&gpio TEGRA_GPIO(L, 2) GPIO_ACTIVE_LOW>;
+			rst-gpio = <&gpio TEGRA_GPIO(L, 4) GPIO_ACTIVE_HIGH>;
+		};
+
+		camera-back1@3d {
+			compatible = "aptina,mt9p111";
+			reg = <0x3d>;
+			pwdn-gpio = <&gpio TEGRA_GPIO(L, 0) GPIO_ACTIVE_LOW>;
+			rst-gpio = <&gpio TEGRA_GPIO(L, 6) GPIO_ACTIVE_HIGH>;
+		};
+
+		camera-back2@36 {
+			compatible = "omnivision,ov5650l";
+			reg = <0x36>;
+			pwdn-gpio = <&gpio TEGRA_GPIO(L, 0) GPIO_ACTIVE_LOW>;
+			rst-gpio = <&gpio TEGRA_GPIO(L, 6) GPIO_ACTIVE_HIGH>;
+		};
+
+		camera-focuser@0c {
+			compatible = "ad5820";
+			reg = <0x0c>;
+		};
+
+		camera-flash@33 {
+			compatible = "nvidia,ltc3216";
+			reg = <0x33>;
+		};
 	};
 
 	gpio_charger: charger {
