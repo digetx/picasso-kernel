@@ -521,6 +521,44 @@
 			micdet-delay = <500>;
 			gpio-cfg = <0 0 0 0xffffffff 0xffffffff>;
 		};
+
+		mpu3050@68 {
+			compatible = "invn,mpu3050";
+			reg = <0x68>;
+			interrupt-parent = <&gpio>;
+			interrupts = <TEGRA_GPIO(Z, 4) IRQ_TYPE_LEVEL_HIGH>;
+
+			compass-i2c-bus = <&dvc>;
+			compass-yamaha-i2c-bus = <&dvc>;
+
+			int-config = <0x10>;
+			level-shifter = <0>;
+			orientation = /bits/ 8 <0	0xff	0
+						0xff	0	0
+						0	0	0xff>;
+
+			accelerometer {
+				interrupt-parent = <&gpio>;
+				interrupts = <TEGRA_GPIO(S, 7) IRQ_TYPE_LEVEL_HIGH>;
+
+				bus-secondary;
+				address = <0xF>;
+				orientation = /bits/ 8 <0	0xff	0
+							0xff	0	0
+							0	0	0xff>;
+			};
+
+			compass {
+				interrupt-parent = <&gpio>;
+				interrupts = <TEGRA_GPIO(N, 9) IRQ_TYPE_LEVEL_HIGH>;
+
+				bus-primary;
+				address = <0xC>;
+				orientation = /bits/ 8 <1	0	0
+							0	0xff	0
+							0	0	0xff>;
+			};
+		};
 	};
 
 	i2c@7000c400 {
@@ -719,7 +757,7 @@
 		};
 	};
 
-	i2c@7000d000 {
+	dvc: i2c@7000d000 {
 		status = "okay";
 		clock-frequency = <400000>;
 
