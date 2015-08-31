@@ -522,6 +522,13 @@
 			gpio-cfg = <0 0 0 0xffffffff 0xffffffff>;
 		};
 
+		lightsensor@1c {
+			compatible = "lite-on,al3000a";
+			reg = <0x1c>;
+			interrupt-parent = <&gpio>;
+			interrupts = <TEGRA_GPIO(Z, 2) IRQ_TYPE_LEVEL_HIGH>;
+		};
+
 		mpu3050@68 {
 			compatible = "invn,mpu3050";
 			reg = <0x68>;
