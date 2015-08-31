@@ -57,7 +57,8 @@ static struct platform_device bluetooth_rfkill_device = {
 static struct gpiod_lookup_table bluetooth_gpio_lookup = {
 	.dev_id = "rfkill_gpio.1",
 	.table = {
-		GPIO_LOOKUP_IDX("tegra-gpio", 160, NULL, 0, 0),
+		GPIO_LOOKUP_IDX("tegra-gpio", 161, NULL, 0, GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP_IDX("tegra-gpio", 160, NULL, 1, 0),
 		{ },
 	},
 };
