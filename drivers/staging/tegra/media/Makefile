@@ -4,3 +4,4 @@ GCOV_PROFILE := y
 #
 obj-y				+= avp/
 obj-$(CONFIG_TEGRA_MEDIASERVER)	+= mediaserver/
+obj-y				+= camera/

@@ -1,2 +1,3 @@
 source "drivers/staging/tegra/media/avp/Kconfig"
 source "drivers/staging/tegra/media/mediaserver/Kconfig"
+source "drivers/staging/tegra/media/camera/Kconfig"
