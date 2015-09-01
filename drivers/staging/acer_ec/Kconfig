@@ -23,3 +23,9 @@ config EC_A500_LEDS
 	depends on MFD_EC_A500 && LEDS_CLASS
 	help
 	  Say Y to enable control of power button leds.
+
+config LSC_FROM_EC
+	bool "Load Lens Correction data from EC"
+	depends on MFD_EC_A500 && VIDEO_YUV5
+	help
+	  Say Y to include support for Lens Correction data from EC.
