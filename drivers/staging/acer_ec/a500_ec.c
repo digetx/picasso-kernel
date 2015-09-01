@@ -49,6 +49,9 @@ int ec_read_word_data_locked(struct ec_reg_data *reg_data)
 	int retries = ec_chip->i2c_retry_count;
 	s32 ret = 0;
 
+	if (!ec_chip)
+		return -ENODEV;
+
 	while (retries > 0) {
 		ret = i2c_smbus_read_word_data(client, reg_data->addr);
 		if (ret >= 0)
@@ -86,6 +89,9 @@ int ec_write_word_data_locked(struct ec_reg_data *reg_data, u16 value)
 	struct i2c_client *client = ec_chip->client;
 	int retries = ec_chip->i2c_retry_count;
 	s32 ret = 0;
+
+	if (!ec_chip)
+		return -ENODEV;
 
 	while (retries > 0) {
 		ret = i2c_smbus_write_word_data(client, reg_data->addr,
@@ -172,6 +178,7 @@ static int ec_probe(struct i2c_client *client,
 			      NULL, 0, NULL);
 	if (ret) {
 		dev_err(&client->dev, "Failed to add subdevices\n");
+		ec_chip = NULL;
 		return ret;
 	}
 
