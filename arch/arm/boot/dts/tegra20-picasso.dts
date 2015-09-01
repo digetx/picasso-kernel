@@ -1020,6 +1020,12 @@
 		vbus-supply = <&vbus3_reg>;
 	};
 
+	rotation-lock {
+		compatible = "rotation-lock-switch";
+		gpio = <&gpio TEGRA_GPIO(Q, 2) GPIO_ACTIVE_HIGH>;
+		debounce-interval = <500>;
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 
