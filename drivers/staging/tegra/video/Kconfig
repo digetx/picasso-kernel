@@ -132,7 +132,7 @@ config NVMAP_PAGE_POOLS_INIT_FILLUP
 	  If increase in boot time is not acceptable, keep this option disabled.
 
 config NVMAP_PAGE_POOL_SIZE
-	hex
+	hex "Page pool size"
 	default 0x0
 
 #config NVMAP_CACHE_MAINT_BY_SET_WAYS
