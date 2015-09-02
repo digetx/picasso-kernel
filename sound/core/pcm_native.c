@@ -982,6 +982,7 @@ static int snd_pcm_do_start(struct snd_pcm_substream *substream, int state)
 {
 	if (substream->runtime->trigger_master != substream)
 		return 0;
+	
 	return substream->ops->trigger(substream, SNDRV_PCM_TRIGGER_START);
 }
 
@@ -1005,6 +1006,7 @@ static void snd_pcm_post_start(struct snd_pcm_substream *substream, int state)
 	if (substream->timer)
 		snd_timer_notify(substream->timer, SNDRV_TIMER_EVENT_MSTART,
 				 &runtime->trigger_tstamp);
+	wake_lock(&substream->wake_lock);
 }
 
 static struct action_ops snd_pcm_action_start = {
@@ -1058,6 +1060,7 @@ static void snd_pcm_post_stop(struct snd_pcm_substream *substream, int state)
 	}
 	wake_up(&runtime->sleep);
 	wake_up(&runtime->tsleep);
+	wake_unlock(&substream->wake_lock);
 }
 
 static struct action_ops snd_pcm_action_stop = {
@@ -1152,12 +1155,14 @@ static void snd_pcm_post_pause(struct snd_pcm_substream *substream, int push)
 					 &runtime->trigger_tstamp);
 		wake_up(&runtime->sleep);
 		wake_up(&runtime->tsleep);
+		wake_unlock(&substream->wake_lock);
 	} else {
 		runtime->status->state = SNDRV_PCM_STATE_RUNNING;
 		if (substream->timer)
 			snd_timer_notify(substream->timer,
 					 SNDRV_TIMER_EVENT_MCONTINUE,
 					 &runtime->trigger_tstamp);
+		wake_lock(&substream->wake_lock);
 	}
 }
 
@@ -1314,6 +1319,7 @@ static void snd_pcm_post_resume(struct snd_pcm_substream *substream, int state)
 		snd_timer_notify(substream->timer, SNDRV_TIMER_EVENT_MRESUME,
 				 &runtime->trigger_tstamp);
 	runtime->status->state = runtime->status->suspended_state;
+	wake_lock(&substream->wake_lock);
 }
 
 static struct action_ops snd_pcm_action_resume = {
@@ -2159,6 +2165,7 @@ void snd_pcm_release_substream(struct snd_pcm_substream *substream)
 			substream->ops->hw_free(substream);
 		substream->ops->close(substream);
 		substream->hw_opened = 0;
+		wake_lock_destroy(&substream->wake_lock);
 	}
 	if (pm_qos_request_active(&substream->latency_pm_qos_req))
 		pm_qos_remove_request(&substream->latency_pm_qos_req);
@@ -2202,6 +2209,13 @@ int snd_pcm_open_substream(struct snd_pcm *pcm, int stream,
 		pcm_dbg(pcm, "snd_pcm_hw_constraints_complete failed\n");
 		goto error;
 	}
+
+	snprintf(substream->wake_lock_name, ARRAY_SIZE(substream->wake_lock_name),
+		"pcm-%s-%d",
+		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK) ? "out" : "in",
+		substream->pcm->device);
+	wake_lock_init(&substream->wake_lock, WAKE_LOCK_SUSPEND,
+		       substream->wake_lock_name);
 
 	*rsubstream = substream;
 	return 0;

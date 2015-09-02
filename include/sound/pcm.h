@@ -30,6 +30,7 @@
 #include <linux/mm.h>
 #include <linux/bitops.h>
 #include <linux/pm_qos.h>
+#include <linux/wakelock.h>
 
 #define snd_pcm_substream_chip(substream) ((substream)->private_data)
 #define snd_pcm_chip(pcm) ((pcm)->private_data)
@@ -421,6 +422,9 @@ struct snd_pcm_substream {
 #endif
 	/* misc flags */
 	unsigned int hw_opened: 1;
+
+	struct wake_lock wake_lock;
+	char wake_lock_name[32];
 };
 
 #define SUBSTREAM_BUSY(substream) ((substream)->ref_count > 0)
