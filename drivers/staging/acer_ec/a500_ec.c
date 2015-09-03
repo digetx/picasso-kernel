@@ -140,7 +140,7 @@ static void ec_reboot(enum reboot_mode mode, const char *cmd)
 
 	dev_info(&ec_chip->client->dev, "reboot ...\n");
 
-	ec_write_word_data(COLD_REBOOT, 1);
+	ec_write_word_data_locked(COLD_REBOOT, 1);
 }
 
 static struct mfd_cell ec_cell[] = {
