@@ -39,6 +39,7 @@
 #include <linux/io.h>
 #include <linux/clk.h>
 #include <linux/of_device.h>
+#include <linux/wakelock.h>
 
 #include <asm/byteorder.h>
 #include <asm/io.h>
@@ -1200,7 +1201,9 @@ static int tegra_vbus_session(struct usb_gadget *gadget, int is_active)
 		udc->usb_state = USB_STATE_DEFAULT;
 		spin_unlock_irqrestore(&udc->lock,flags);
 		usb_phy_set_suspend(udc->phy, 1);
+		wake_unlock(&udc->wakelock);
 	} else if (!udc->vbus_active && is_active) {
+		wake_lock(&udc->wakelock);
 		usb_phy_set_suspend(udc->phy, 0);
 		/* setup the controller in the device mode */
 		dr_controller_setup(udc);
@@ -2387,6 +2390,8 @@ static int tegra_udc_probe(struct platform_device *pdev)
 		goto err_phy;
 	}
 
+	wake_lock_init(&udc->wakelock, WAKE_LOCK_SUSPEND, driver_name);
+
 	/* Setup gadget structure */
 	udc->gadget.ops = &tegra_gadget_ops;
 	udc->gadget.max_speed = USB_SPEED_HIGH;
@@ -2442,6 +2447,8 @@ static int tegra_udc_probe(struct platform_device *pdev)
 	/* Power down the phy if cable is not connected */
 	if (!vbus_enabled(udc))
 		usb_phy_set_suspend(udc->phy, 1);
+	else
+		wake_lock(&udc->wakelock);
 #endif
 
 	dev_info(&pdev->dev, "registered\n");
