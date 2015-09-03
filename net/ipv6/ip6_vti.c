@@ -271,8 +271,7 @@ static struct ip6_tnl *vti6_locate(struct net *net, struct __ip6_tnl_parm *p,
 static void vti6_dev_uninit(struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
-	struct net *net = dev_net(dev);
-	struct vti6_net *ip6n = net_generic(net, vti6_net_id);
+	struct vti6_net *ip6n = net_generic(t->net, vti6_net_id);
 
 	if (dev == ip6n->fb_tnl_dev)
 		RCU_INIT_POINTER(ip6n->tnls_wc[0], NULL);
@@ -556,7 +555,7 @@ static int vti6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 	if (type == NDISC_REDIRECT)
 		ip6_redirect(skb, net, skb->dev->ifindex, 0);
 	else
-		ip6_update_pmtu(skb, net, info, 0, 0);
+		ip6_update_pmtu(skb, net, info, 0, 0, INVALID_UID);
 	xfrm_state_put(x);
 
 	return 0;

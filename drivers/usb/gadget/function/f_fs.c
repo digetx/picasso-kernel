@@ -89,12 +89,15 @@ ffs_setup_state_clear_cancelled(struct ffs_data *ffs)
 		cmpxchg(&ffs->setup_state, FFS_SETUP_CANCELLED, FFS_NO_SETUP);
 }
 
+static void ffs_func_free(struct ffs_function *func);
 
 static void ffs_func_eps_disable(struct ffs_function *func);
 static int __must_check ffs_func_eps_enable(struct ffs_function *func);
 
 static int ffs_func_bind(struct usb_configuration *,
 			 struct usb_function *);
+static void old_ffs_func_unbind(struct usb_configuration *,
+				struct usb_function *);
 static int ffs_func_set_alt(struct usb_function *, unsigned, unsigned);
 static void ffs_func_disable(struct usb_function *);
 static int ffs_func_setup(struct usb_function *,
@@ -1685,7 +1688,6 @@ static void ffs_epfiles_destroy(struct ffs_epfile *epfiles, unsigned count)
 	kfree(epfiles);
 }
 
-
 static void ffs_func_eps_disable(struct ffs_function *func)
 {
 	struct ffs_ep *ep         = func->eps;
@@ -2957,6 +2959,24 @@ static int ffs_func_bind(struct usb_configuration *c,
 
 /* Other USB function hooks *************************************************/
 
+static void old_ffs_func_unbind(struct usb_configuration *c,
+				struct usb_function *f)
+{
+	struct ffs_function *func = ffs_func_from_usb(f);
+	struct ffs_data *ffs = func->ffs;
+
+	ENTER();
+
+	if (ffs->func == func) {
+		ffs_func_eps_disable(func);
+		ffs->func = NULL;
+	}
+
+	ffs_event_add(ffs, FUNCTIONFS_UNBIND);
+
+	ffs_func_free(func);
+}
+
 static int ffs_func_set_alt(struct usb_function *f,
 			    unsigned interface, unsigned alt)
 {
@@ -3469,6 +3489,7 @@ done:
 static void ffs_closed(struct ffs_data *ffs)
 {
 	struct ffs_dev *ffs_obj;
+	struct f_fs_opts *opts;
 
 	ENTER();
 	ffs_dev_lock();
@@ -3482,8 +3503,13 @@ static void ffs_closed(struct ffs_data *ffs)
 	if (ffs_obj->ffs_closed_callback)
 		ffs_obj->ffs_closed_callback(ffs);
 
-	if (!ffs_obj->opts || ffs_obj->opts->no_configfs
-	    || !ffs_obj->opts->func_inst.group.cg_item.ci_parent)
+	if (ffs_obj->opts)
+		opts = ffs_obj->opts;
+	else
+		goto done;
+
+	if (opts->no_configfs || !opts->func_inst.group.cg_item.ci_parent
+	    || !atomic_read(&opts->func_inst.group.cg_item.ci_kref.refcount))
 		goto done;
 
 	unregister_gadget_item(ffs_obj->opts->
