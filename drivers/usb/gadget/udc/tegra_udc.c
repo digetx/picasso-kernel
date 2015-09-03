@@ -2356,6 +2356,8 @@ static int tegra_udc_probe(struct platform_device *pdev)
 		err = 0;
 	}
 
+	enable_irq_wake(udc->irq);
+
 	udc->phy = devm_usb_get_phy_by_phandle(&pdev->dev, "nvidia,phy", 0);
 	if (IS_ERR(udc->phy)) {
 		dev_err(&pdev->dev, "failed to open USB phy\n");
