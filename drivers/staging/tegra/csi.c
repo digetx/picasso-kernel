@@ -35,6 +35,7 @@ int tegra_vi_csi_writel(u32 val, u32 offset)
 		vi_clk = clk_get_sys("tegra_camera", "vi");
 		if (IS_ERR_OR_NULL(vi_clk)) {
 			pr_err("vi: can't get vi clock\n");
+			vi_clk = NULL;
 			return -EINVAL;
 		}
 	}
@@ -44,6 +45,7 @@ int tegra_vi_csi_writel(u32 val, u32 offset)
 		csi_clk = clk_get_sys("tegra_camera", "csi");
 		if (IS_ERR_OR_NULL(csi_clk)) {
 			pr_err("csi: can't get csi clock\n");
+			csi_clk = NULL;
 			return -EINVAL;
 		}
 	}
@@ -62,6 +64,7 @@ int tegra_vi_csi_readl(u32 offset, u32 *val)
 		vi_clk = clk_get_sys("tegra_camera", "vi");
 		if (IS_ERR_OR_NULL(vi_clk)) {
 			pr_err("vi: can't get vi clock\n");
+			vi_clk = NULL;
 			return -EINVAL;
 		}
 	}
@@ -71,6 +74,7 @@ int tegra_vi_csi_readl(u32 offset, u32 *val)
 		csi_clk = clk_get_sys("tegra_camera", "csi");
 		if (IS_ERR_OR_NULL(csi_clk)) {
 			pr_err("csi: can't get csi clock\n");
+			csi_clk = NULL;
 			return -EINVAL;
 		}
 	}
