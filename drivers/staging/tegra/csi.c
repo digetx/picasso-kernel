@@ -39,7 +39,6 @@ int tegra_vi_csi_writel(u32 val, u32 offset)
 			return -EINVAL;
 		}
 	}
-	clk_prepare_enable(vi_clk);
 
 	if (csi_clk == NULL) {
 		csi_clk = clk_get_sys("tegra_camera", "csi");
@@ -49,12 +48,15 @@ int tegra_vi_csi_writel(u32 val, u32 offset)
 			return -EINVAL;
 		}
 	}
+
+	clk_prepare_enable(vi_clk);
 	clk_prepare_enable(csi_clk);
 
 	writel(val, IO_ADDRESS(TEGRA_VI_BASE) + offset * 4);
 
 	clk_disable_unprepare(csi_clk);
 	clk_disable_unprepare(vi_clk);
+
 	return 0;
 }
 
@@ -68,7 +70,6 @@ int tegra_vi_csi_readl(u32 offset, u32 *val)
 			return -EINVAL;
 		}
 	}
-	clk_prepare_enable(vi_clk);
 
 	if (csi_clk == NULL) {
 		csi_clk = clk_get_sys("tegra_camera", "csi");
@@ -78,6 +79,8 @@ int tegra_vi_csi_readl(u32 offset, u32 *val)
 			return -EINVAL;
 		}
 	}
+
+	clk_prepare_enable(vi_clk);
 	clk_prepare_enable(csi_clk);
 
 	*val = readl(IO_ADDRESS(TEGRA_VI_BASE) + offset * 4);
