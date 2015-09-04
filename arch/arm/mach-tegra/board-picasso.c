@@ -23,6 +23,8 @@
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 
+#include <../drivers/staging/android/timed_gpio.h>
+
 static struct rfkill_gpio_platform_data wifi_rfkill_platform_data = {
 	.name	= "wifi_rfkill",
 	.type	= RFKILL_TYPE_WLAN,
@@ -107,6 +109,24 @@ static struct notifier_block picasso_reboot_notifier = {
 	.priority = INT_MAX,
 };
 
+static struct timed_gpio vibrator_gpio = {
+	.name = "vibrator",
+	.max_timeout = 10000,
+	.gpio = 173,
+};
+
+static struct timed_gpio_platform_data timed_gpio_platform_data = {
+	.num_gpios = 1,
+	.gpios = &vibrator_gpio,
+};
+
+static struct platform_device timed_gpio_device = {
+	.name	= TIMED_GPIO_NAME,
+	.dev	= {
+		.platform_data = &timed_gpio_platform_data,
+	},
+};
+
 void __init tegra_picasso_rfkill_init(void)
 {
 	gpiod_add_lookup_table(&wifi_gpio_lookup);
@@ -116,4 +136,6 @@ void __init tegra_picasso_rfkill_init(void)
 	platform_device_register(&bluetooth_rfkill_device);
 
 	register_reboot_notifier(&picasso_reboot_notifier);
+
+	platform_device_register(&timed_gpio_device);
 }
