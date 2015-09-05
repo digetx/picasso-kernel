@@ -13,9 +13,9 @@
 	aliases {
 		rtc0 = "/i2c@7000d000/tps6586x@34";
 		rtc1 = "/rtc@7000e000";
-		serial0 = &uartd;
 		serial1 = &uartb;
 		serial2 = &uartc;
+		serial3 = &uartd;
 	};
 
 	memory {
@@ -1122,6 +1122,7 @@
 	};
 
 	uartd: serial@70006300 {
+		compatible = "nvidia,tegra20-hsuart";
 		status = "okay";
 	};
 
