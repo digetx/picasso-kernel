@@ -56,6 +56,8 @@
 #define NVMAP_NUM_PTES		64
 #define NVMAP_CARVEOUT_KILLER_RETRY_TIME 100 /* msecs */
 
+#define AID_USER	100000
+
 #ifdef CONFIG_NVMAP_CARVEOUT_KILLER
 static bool carveout_killer = true;
 #else
@@ -403,6 +405,9 @@ bool nvmap_shrink_carveout(struct nvmap_carveout_node *node)
 		struct signal_struct *sig;
 
 		if (!task)
+			continue;
+
+		if (task->pid < AID_USER)
 			continue;
 
 		task_lock(task);
