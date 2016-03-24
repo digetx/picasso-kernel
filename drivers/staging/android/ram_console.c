@@ -318,25 +318,25 @@ static int __init ram_console_init(struct ram_console_buffer *buffer,
 	// ignore start corruption
 	buffer->start = 0;
 
-// 	if (buffer->sig == RAM_CONSOLE_SIG) {
-// 		if (buffer->size > ram_console_buffer_size
-// 		    || le32_to_cpu(buffer->start) > buffer->size) {
-// 			printk(KERN_INFO "ram_console: found existing invalid "
-// 			       "buffer, size %d, start %d\n",
-// 			       buffer->size, le32_to_cpu(buffer->start));
-// 			memset(buffer, 0, buffer_size);
-// 		}
-// 		else {
-// 			printk(KERN_INFO "ram_console: found existing buffer, "
-// 			       "size %d, start %d\n",
-// 			       buffer->size, le32_to_cpu(buffer->start));
-// 			ram_console_save_old(buffer, bootinfo, old_buf);
-// 		}
-// 	} else {
-// 		printk(KERN_INFO "ram_console: no valid data in buffer "
-// 		       "(sig = 0x%08x)\n", buffer->sig);
+	if (buffer->sig == RAM_CONSOLE_SIG) {
+		if (buffer->size > ram_console_buffer_size
+		    || le32_to_cpu(buffer->start) > buffer->size) {
+			printk(KERN_INFO "ram_console: found existing invalid "
+			       "buffer, size %d, start %d\n",
+			       buffer->size, le32_to_cpu(buffer->start));
+			memset(buffer, 0, buffer_size);
+		}
+		else {
+			printk(KERN_INFO "ram_console: found existing buffer, "
+			       "size %d, start %d\n",
+			       buffer->size, le32_to_cpu(buffer->start));
+			ram_console_save_old(buffer, bootinfo, old_buf);
+		}
+	} else {
+		printk(KERN_INFO "ram_console: no valid data in buffer "
+		       "(sig = 0x%08x)\n", buffer->sig);
 		memset(buffer, 0, buffer_size);
-// 	}
+	}
 
 	buffer->sig = RAM_CONSOLE_SIG;
 	buffer->start = 0;
