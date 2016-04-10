@@ -379,14 +379,15 @@ static void do_svc_module_clock(struct avp_svc_info *avp_svc,
 		avp_svc->is_vde_on = msg->enable;
 
 	if (avp_svc->is_vde_on == true)
-		emc_rate = ULONG_MAX;
+		emc_rate = 400000000;
+
+	clk_set_rate(avp_svc->emcclk, emc_rate);
 
 	mutex_lock(&avp_svc->clk_lock);
 	aclk = &avp_svc->clks[mod->clk_req];
 	if (msg->enable) {
 		if (aclk->refcnt++ == 0) {
-// 			clk_set_rate(avp_svc->emcclk, emc_rate);
-// 			clk_prepare_enable(avp_svc->emcclk);
+			clk_prepare_enable(avp_svc->emcclk);
 			clk_prepare_enable(avp_svc->sclk);
 			if (aclk->clk)
 				clk_prepare_enable(aclk->clk);
@@ -400,8 +401,7 @@ static void do_svc_module_clock(struct avp_svc_info *avp_svc,
 				clk_disable_unprepare(aclk->clk);
 // 			clk_set_rate(avp_svc->sclk, 0);
 			clk_disable_unprepare(avp_svc->sclk);
-// 			clk_set_rate(avp_svc->emcclk, 0);
-// 			clk_disable_unprepare(avp_svc->emcclk);
+			clk_disable_unprepare(avp_svc->emcclk);
 		}
 	}
 	mutex_unlock(&avp_svc->clk_lock);
@@ -492,17 +492,17 @@ static void do_svc_module_clock_set(struct avp_svc_info *avp_svc,
 	mutex_lock(&avp_svc->clk_lock);
 	if (msg->module_id == AVP_MODULE_ID_AVP) {
 		/* check if max avp clock is asked and set max emc frequency */
-// 		if (msg->clk_freq >= avp_svc->max_avp_rate) {
-// 			clk_set_rate(avp_svc->emcclk, ULONG_MAX);
-// 		}
-// 		else {
-// 			/* if no, set emc frequency as per platform data.
-// 			 * if no platform data is send, set it to maximum */
-// 			if (avp_svc->emc_rate)
-// 				clk_set_rate(avp_svc->emcclk, avp_svc->emc_rate);
-// 			else
-// 				clk_set_rate(avp_svc->emcclk, ULONG_MAX);
-// 		}
+		if (msg->clk_freq >= avp_svc->max_avp_rate) {
+			clk_set_rate(avp_svc->emcclk, 400000000);
+		}
+		else {
+			/* if no, set emc frequency as per platform data.
+			 * if no platform data is send, set it to maximum */
+			if (avp_svc->emc_rate)
+				clk_set_rate(avp_svc->emcclk, avp_svc->emc_rate);
+			else
+				clk_set_rate(avp_svc->emcclk, 400000000);
+		}
 // 		ret = clk_set_rate(avp_svc->sclk, msg->clk_freq);
 	} else {
 		u32 rate;
@@ -806,8 +806,7 @@ void avp_svc_stop(struct avp_svc_info *avp_svc)
 			/* sclk/emcclk was enabled once for every clock */
 // 			clk_set_rate(avp_svc->sclk, 0);
 			clk_disable_unprepare(avp_svc->sclk);
-// 			clk_set_rate(avp_svc->emcclk, 0);
-// 			clk_disable_unprepare(avp_svc->emcclk);
+			clk_disable_unprepare(avp_svc->emcclk);
 		}
 		aclk->refcnt = 0;
 	}
@@ -886,13 +885,13 @@ struct avp_svc_info *avp_svc_init(struct platform_device *pdev,
 	 * if platform data is NULL.
 	 */
 	avp_svc->emc_rate = 0;
-// 	if (pdata) {
-// 		clk_set_rate(avp_svc->emcclk, pdata->emc_clk_rate);
-// 		avp_svc->emc_rate = pdata->emc_clk_rate;
-// 	}
-// 	else {
-// 		clk_set_rate(avp_svc->emcclk, ULONG_MAX);
-// 	}
+	if (pdata) {
+		clk_set_rate(avp_svc->emcclk, pdata->emc_clk_rate);
+		avp_svc->emc_rate = pdata->emc_clk_rate;
+	}
+	else {
+		clk_set_rate(avp_svc->emcclk, 400000000);
+	}
 
 	avp_svc->rpc_node = rpc_node;
 

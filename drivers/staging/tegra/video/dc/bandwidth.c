@@ -214,9 +214,11 @@ void tegra_dc_clear_bandwidth(struct tegra_dc *dc)
 {
 	trace_printk("%s:%s rate=%d\n", dc->ndev->name, __func__,
 		dc->emc_clk_rate);
-// 	if (tegra_is_clk_enabled(dc->emc_clk))
-// 		clk_disable_unprepare(dc->emc_clk);
-// 	dc->emc_clk_rate = 0;
+	if (tegra_is_clk_enabled(dc->emc_clk))
+		clk_disable_unprepare(dc->emc_clk);
+	dc->emc_clk_rate = 0;
+
+	clk_set_rate(dc->emc_clk, dc->emc_clk_rate);
 }
 
 /* use the larger of dc->emc_clk_rate or dc->new_emc_clk_rate, and copies
@@ -227,32 +229,34 @@ void tegra_dc_clear_bandwidth(struct tegra_dc *dc)
  */
 void tegra_dc_program_bandwidth(struct tegra_dc *dc, bool use_new)
 {
-// 	unsigned i;
-// 
-// 	if (use_new || dc->emc_clk_rate != dc->new_emc_clk_rate) {
-// 		/* going from 0 to non-zero */
-// 		if (!dc->emc_clk_rate && !tegra_is_clk_enabled(dc->emc_clk))
-// 			clk_prepare_enable(dc->emc_clk);
-// 
-// 		clk_set_rate(dc->emc_clk,
-// 			max(dc->emc_clk_rate, dc->new_emc_clk_rate));
-// 		dc->emc_clk_rate = dc->new_emc_clk_rate;
-// 
-// 		/* going from non-zero to 0 */
-// 		if (!dc->new_emc_clk_rate && tegra_is_clk_enabled(dc->emc_clk))
-// 			clk_disable_unprepare(dc->emc_clk);
-// 	}
-// 
-// 	for (i = 0; i < DC_N_WINDOWS; i++) {
-// 		struct tegra_dc_win *w = &dc->windows[i];
-// 
-// 		if ((use_new || w->bandwidth != w->new_bandwidth) &&
-// 			w->new_bandwidth != 0)
-// 			tegra_dc_set_latency_allowance(dc, w);
-// 		w->bandwidth = w->new_bandwidth;
-// 		trace_printk("%s:win%u bandwidth=%d\n", dc->ndev->name, w->idx,
-// 			w->bandwidth);
-// 	}
+	unsigned i;
+
+	use_new = false;
+
+	if (use_new || dc->emc_clk_rate != dc->new_emc_clk_rate) {
+		/* going from 0 to non-zero */
+		if (!dc->emc_clk_rate && !tegra_is_clk_enabled(dc->emc_clk))
+			clk_prepare_enable(dc->emc_clk);
+
+		clk_set_rate(dc->emc_clk,
+			max(dc->emc_clk_rate, dc->new_emc_clk_rate));
+		dc->emc_clk_rate = dc->new_emc_clk_rate;
+
+		/* going from non-zero to 0 */
+		if (!dc->new_emc_clk_rate && tegra_is_clk_enabled(dc->emc_clk))
+			clk_disable_unprepare(dc->emc_clk);
+	}
+
+	for (i = 0; i < DC_N_WINDOWS; i++) {
+		struct tegra_dc_win *w = &dc->windows[i];
+
+		if ((use_new || w->bandwidth != w->new_bandwidth) &&
+			w->new_bandwidth != 0)
+			tegra_dc_set_latency_allowance(dc, w);
+		w->bandwidth = w->new_bandwidth;
+		trace_printk("%s:win%u bandwidth=%d\n", dc->ndev->name, w->idx,
+			w->bandwidth);
+	}
 }
 
 int tegra_dc_set_dynamic_emc(struct tegra_dc_win *windows[], int n)

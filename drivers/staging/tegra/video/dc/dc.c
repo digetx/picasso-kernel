@@ -508,7 +508,7 @@ int tegra_dc_get_stride(struct tegra_dc *dc, unsigned win)
 {
 	u32 stride;
 
-// 	if (!dc->enabled)
+	if (!dc->enabled)
 		return 0;
 	BUG_ON(win > DC_N_WINDOWS);
 	mutex_lock(&dc->lock);
