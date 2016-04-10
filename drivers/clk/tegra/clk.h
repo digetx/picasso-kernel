@@ -392,6 +392,7 @@ struct tegra_clk_periph_gate {
 #define TEGRA_PERIPH_WAR_1005168 BIT(3)
 #define TEGRA_PERIPH_NO_DIV BIT(4)
 #define TEGRA_PERIPH_NO_GATE BIT(5)
+#define TEGRA_PERIPH_EMC BIT(6)
 
 extern const struct clk_ops tegra_clk_periph_gate_ops;
 struct clk *tegra_clk_register_periph_gate(const char *name,

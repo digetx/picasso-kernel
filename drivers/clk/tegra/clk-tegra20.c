@@ -817,6 +817,9 @@ static struct tegra_periph_init_data tegra_periph_nodiv_clk_list[] = {
 	TEGRA_INIT_DATA_NODIV("disp2",	mux_pllpdc_clkm, CLK_SOURCE_DISP2, 30, 2, 26,  0, TEGRA20_CLK_DISP2),
 };
 
+static struct tegra_clk_periph periph_emc = TEGRA_CLK_PERIPH(30, 2, 0, 0, 8, 1,
+				TEGRA_DIVIDER_ROUND_UP, 57, 0, NULL, NULL);
+
 static void __init tegra20_periph_clk_init(void)
 {
 	struct tegra_periph_init_data *data;
@@ -835,13 +838,10 @@ static void __init tegra20_periph_clk_init(void)
 	clks[TEGRA20_CLK_APBDMA] = clk;
 
 	/* emc */
-	clk = clk_register_mux(NULL, "emc_mux", mux_pllmcp_clkm,
-			       ARRAY_SIZE(mux_pllmcp_clkm),
-			       CLK_SET_RATE_NO_REPARENT,
-			       clk_base + CLK_SOURCE_EMC,
-			       30, 2, 0, NULL);
-	clk = tegra_clk_register_periph_gate("emc", "emc_mux", 0, clk_base, 0,
-				    57, periph_clk_enb_refcnt);
+	clk = tegra_clk_register_periph("emc", mux_pllmcp_clkm,
+					ARRAY_SIZE(mux_pllmcp_clkm),
+					&periph_emc, clk_base, CLK_SOURCE_EMC,
+					TEGRA_PERIPH_EMC);
 	clks[TEGRA20_CLK_EMC] = clk;
 
 	/* dsi */

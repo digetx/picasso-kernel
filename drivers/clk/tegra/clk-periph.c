@@ -16,6 +16,7 @@
 
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/err.h>
@@ -138,6 +139,74 @@ static const struct clk_ops tegra_clk_periph_no_gate_ops = {
 	.set_rate = clk_periph_set_rate,
 };
 
+extern int tegra_emc_set_rate(unsigned long rate);
+extern long tegra_emc_round_rate(unsigned long rate);
+
+static long tegra20_emc_clk_round_rate(struct clk_hw *hw, unsigned long rate,
+				       unsigned long *prate)
+{
+	long emc_rate;
+	long clk_rate;
+
+	/*
+	 * The slowest entry in the EMC clock table that is at least as
+	 * fast as rate.
+	 */
+	emc_rate = tegra_emc_round_rate(rate);
+	if (emc_rate < 0)
+		emc_rate = rate;
+
+	/*
+	 * The fastest rate the PLL will generate that is at most the
+	 * requested rate.
+	 */
+	clk_rate = clk_periph_round_rate(hw, emc_rate, prate);
+
+	/*
+	 * If this fails, and emc_rate > clk_rate, it's because the maximum
+	 * rate in the EMC tables is larger than the maximum rate of the EMC
+	 * clock. The EMC clock's max rate is the rate it was running when the
+	 * kernel booted. Such a mismatch is probably due to using the wrong
+	 * BCT, i.e. using a Tegra20 BCT with an EMC table written for Tegra25.
+	 */
+	WARN_ONCE(emc_rate != clk_rate, "emc_rate %ld != clk_rate %ld",
+		  emc_rate, clk_rate);
+
+	return emc_rate;
+}
+
+static int tegra20_emc_clk_set_rate(struct clk_hw *hw, unsigned long rate,
+		unsigned long parent_rate)
+{
+	int ret;
+
+	/*
+	 * The Tegra2 memory controller has an interlock with the clock
+	 * block that allows memory shadowed registers to be updated,
+	 * and then transfer them to the main registers at the same
+	 * time as the clock update without glitches.
+	 */
+	ret = tegra_emc_set_rate(rate);
+	if (ret < 0)
+		return ret;
+
+	ret = clk_periph_set_rate(hw, rate, parent_rate);
+	udelay(1);
+
+	return ret;
+}
+
+const struct clk_ops tegra_clk_emc_ops = {
+	.get_parent = clk_periph_get_parent,
+	.set_parent = clk_periph_set_parent,
+	.recalc_rate = clk_periph_recalc_rate,
+	.round_rate = tegra20_emc_clk_round_rate,
+	.set_rate = tegra20_emc_clk_set_rate,
+	.is_enabled = clk_periph_is_enabled,
+	.enable = clk_periph_enable,
+	.disable = clk_periph_disable,
+};
+
 static struct clk *_tegra_clk_register_periph(const char *name,
 			const char **parent_names, int num_parents,
 			struct tegra_clk_periph *periph,
@@ -154,6 +223,8 @@ static struct clk *_tegra_clk_register_periph(const char *name,
 		init.ops = &tegra_clk_periph_nodiv_ops;
 	} else if (periph->gate.flags & TEGRA_PERIPH_NO_GATE)
 		init.ops = &tegra_clk_periph_no_gate_ops;
+	else if (flags & TEGRA_PERIPH_EMC)
+		init.ops = &tegra_clk_emc_ops;
 	else
 		init.ops = &tegra_clk_periph_ops;
 
