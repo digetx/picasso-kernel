@@ -2309,10 +2309,6 @@ extern int suspend_get(char *buffer, struct kernel_param *kp)
 	return 0;
 }
 
-int suspend;
-
-module_param_call(suspend, suspend_set, suspend_get, &suspend, 0644);
-
 static struct of_device_id tegra_dc_of_match[] = {
 	{ .compatible = "nvidia,tegra20-dc", },
 	{ .compatible = "nvidia,tegra30-dc", },
