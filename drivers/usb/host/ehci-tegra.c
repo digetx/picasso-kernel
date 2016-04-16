@@ -551,6 +551,33 @@ static void tegra_ehci_hcd_shutdown(struct platform_device *pdev)
 		hcd->driver->shutdown(hcd);
 }
 
+static int tegra_ehci_suspend(struct device *dev)
+{
+	struct usb_hcd *hcd = dev_get_drvdata(dev);
+	struct tegra_usb_phy *phy =
+			container_of(hcd->usb_phy, struct tegra_usb_phy, u_phy);
+
+	if (phy->is_ulpi_phy)
+		return 0;
+
+	return usb_phy_set_suspend(hcd->usb_phy, 1);
+}
+
+static int tegra_ehci_resume(struct device *dev)
+{
+	struct usb_hcd *hcd = dev_get_drvdata(dev);
+	struct tegra_usb_phy *phy =
+			container_of(hcd->usb_phy, struct tegra_usb_phy, u_phy);
+
+	if (phy->is_ulpi_phy)
+		return 0;
+
+	return usb_phy_set_suspend(hcd->usb_phy, 0);
+}
+
+static SIMPLE_DEV_PM_OPS(tegra_ehci_pm_ops,
+			 tegra_ehci_suspend, tegra_ehci_resume);
+
 static struct platform_driver tegra_ehci_driver = {
 	.probe		= tegra_ehci_probe,
 	.remove		= tegra_ehci_remove,
@@ -558,6 +585,7 @@ static struct platform_driver tegra_ehci_driver = {
 	.driver		= {
 		.name	= DRV_NAME,
 		.of_match_table = tegra_ehci_of_match,
+		.pm		= &tegra_ehci_pm_ops,
 	}
 };
 
