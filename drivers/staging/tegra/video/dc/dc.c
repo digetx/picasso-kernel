@@ -2222,7 +2222,6 @@ static int tegra_dc_suspend(struct nvhost_device *ndev, pm_message_t state)
 	struct tegra_dc *dc = nvhost_get_drvdata(ndev);
 
 	trace_printk("%s:suspend\n", dc->ndev->name);
-	dev_info(&ndev->dev, "suspend\n");
 
 	flush_delayed_work(&dc->disable_work);
 
@@ -2258,7 +2257,6 @@ static int tegra_dc_resume(struct nvhost_device *ndev)
 	struct tegra_dc *dc = nvhost_get_drvdata(ndev);
 
 	trace_printk("%s:resume\n", dc->ndev->name);
-	dev_info(&ndev->dev, "resume\n");
 
 	mutex_lock(&dc->lock);
 
