@@ -129,7 +129,7 @@ long tegra_emc_round_rate(unsigned long rate)
 	}
 
 	if (best < 0)
-		return -EINVAL;
+		best = i - 1;
 
 	pr_debug("%s: using %lu\n", __func__, pdata->tables[best].rate);
 
