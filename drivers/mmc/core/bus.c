@@ -165,9 +165,14 @@ static int mmc_bus_resume(struct device *dev)
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = mmc_dev_to_card(dev);
 	struct mmc_host *host = card->host;
-	int ret;
+	int ret = 0;
 
-	ret = host->bus_ops->resume(host);
+	if (!mmc_bus_manual_resume(host)) {
+		ret = host->bus_ops->resume(host);
+	} else {
+		host->bus_resume_flags |= MMC_BUSRESUME_NEEDS_RESUME;
+	}
+
 	if (ret)
 		pr_warn("%s: error %d during resume (card was removed?)\n",
 			mmc_hostname(host), ret);
