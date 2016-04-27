@@ -2435,6 +2435,8 @@ static int tegra_udc_probe(struct platform_device *pdev)
 	/* Create work for controlling clocks to the phy if otg is disabled */
 	INIT_WORK(&udc->irq_work, tegra_udc_irq_work);
 
+	tegra_udc_restart(udc);
+
 #ifdef CONFIG_USB_OTG_UTILS
 	udc->transceiver = usb_get_phy(USB_PHY_TYPE_USB2);
 
@@ -2448,9 +2450,10 @@ static int tegra_udc_probe(struct platform_device *pdev)
 	}
 #else
 	/* Power down the phy if cable is not connected */
-	if (!vbus_enabled(udc))
+	if (!vbus_enabled(udc)) {
+		udc->vbus_active = 0;
 		usb_phy_set_suspend(udc->phy, 1);
-	else
+	} else
 		wake_lock(&udc->wakelock);
 #endif
 
