@@ -413,7 +413,9 @@ cifs_echo_request(struct work_struct *work)
 	 * server->ops->need_neg() == true. Also, no need to ping if
 	 * we got a response recently.
 	 */
-	if (!server->ops->need_neg || server->ops->need_neg(server) ||
+
+	if (server->tcpStatus == CifsNeedReconnect ||
+	    server->tcpStatus == CifsExiting || server->tcpStatus == CifsNew ||
 	    (server->ops->can_echo && !server->ops->can_echo(server)) ||
 	    time_before(jiffies, server->lstrp + SMB_ECHO_INTERVAL - HZ))
 		goto requeue_echo;
@@ -773,8 +775,7 @@ static void clean_demultiplex_info(struct TCP_Server_Info *server)
 
 	length = atomic_dec_return(&tcpSesAllocCount);
 	if (length > 0)
-		mempool_resize(cifs_req_poolp, length + cifs_min_rcv,
-				GFP_KERNEL);
+		mempool_resize(cifs_req_poolp, length + cifs_min_rcv);
 }
 
 static int
@@ -848,8 +849,7 @@ cifs_demultiplex_thread(void *p)
 
 	length = atomic_inc_return(&tcpSesAllocCount);
 	if (length > 1)
-		mempool_resize(cifs_req_poolp, length + cifs_min_rcv,
-				GFP_KERNEL);
+		mempool_resize(cifs_req_poolp, length + cifs_min_rcv);
 
 	set_freezable();
 	while (server->tcpStatus != CifsExiting) {

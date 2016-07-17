@@ -55,9 +55,6 @@ __ffs_data_got_descs(struct ffs_data *ffs, char *data, size_t len);
 static int __must_check
 __ffs_data_got_strings(struct ffs_data *ffs, char *data, size_t len);
 
-static void ffs_func_unbind(struct usb_configuration *c,
-			    struct usb_function *f);
-
 
 /* The function structure ***************************************************/
 
@@ -1603,6 +1600,61 @@ static int ffs_epfiles_create(struct ffs_data *ffs)
 	return 0;
 }
 
+static void ffs_epfiles_destroy(struct ffs_epfile *epfiles, unsigned count)
+{
+	struct ffs_epfile *epfile = epfiles;
+
+	ENTER();
+
+	for (; count; --count, ++epfile) {
+		BUG_ON(mutex_is_locked(&epfile->mutex) ||
+		       waitqueue_active(&epfile->wait));
+		if (epfile->dentry) {
+			d_delete(epfile->dentry);
+			dput(epfile->dentry);
+			epfile->dentry = NULL;
+		}
+	}
+
+	kfree(epfiles);
+}
+
+static int __maybe_unused functionfs_bind_config(struct usb_composite_dev *cdev,
+				   struct usb_configuration *c,
+				   struct ffs_data *ffs)
+{
+	struct ffs_function *func;
+	int ret;
+
+	ENTER();
+
+	func = kzalloc(sizeof *func, GFP_KERNEL);
+	if (unlikely(!func))
+		return -ENOMEM;
+
+	func->function.name    = "Function FS Gadget";
+	func->function.strings = ffs->stringtabs;
+
+	func->function.bind    = ffs_func_bind;
+	func->function.unbind  = old_ffs_func_unbind;
+	func->function.set_alt = ffs_func_set_alt;
+	func->function.disable = ffs_func_disable;
+	func->function.setup   = ffs_func_setup;
+	func->function.suspend = ffs_func_suspend;
+	func->function.resume  = ffs_func_resume;
+
+	func->conf   = c;
+	func->gadget = cdev->gadget;
+	func->ffs = ffs;
+	ffs_data_get(ffs);
+
+	ret = usb_add_function(c, &func->function);
+	if (unlikely(ret))
+		ffs_func_free(func);
+
+	return ret;
+}
+
 static void ffs_func_free(struct ffs_function *func)
 {
 	struct ffs_ep *ep         = func->eps;
@@ -1631,61 +1683,6 @@ static void ffs_func_free(struct ffs_function *func)
 	 */
 
 	kfree(func);
-}
-
-static int functionfs_bind_config(struct usb_composite_dev *cdev,
-				  struct usb_configuration *c,
-				  struct ffs_data *ffs)
-{
-	struct ffs_function *func;
-	int ret;
-
-	ENTER();
-
-	func = kzalloc(sizeof *func, GFP_KERNEL);
-	if (unlikely(!func))
-		return -ENOMEM;
-
-	func->function.name    = "Function FS Gadget";
-	func->function.strings = ffs->stringtabs;
-
-	func->function.bind    = ffs_func_bind;
-	func->function.unbind  = ffs_func_unbind;
-	func->function.set_alt = ffs_func_set_alt;
-	func->function.disable = ffs_func_disable;
-	func->function.setup   = ffs_func_setup;
-	func->function.suspend = ffs_func_suspend;
-	func->function.resume  = ffs_func_resume;
-
-	func->conf   = c;
-	func->gadget = cdev->gadget;
-	func->ffs = ffs;
-	ffs_data_get(ffs);
-
-	ret = usb_add_function(c, &func->function);
-	if (unlikely(ret))
-		ffs_func_free(func);
-
-	return ret;
-}
-
-static void ffs_epfiles_destroy(struct ffs_epfile *epfiles, unsigned count)
-{
-	struct ffs_epfile *epfile = epfiles;
-
-	ENTER();
-
-	for (; count; --count, ++epfile) {
-		BUG_ON(mutex_is_locked(&epfile->mutex) ||
-		       waitqueue_active(&epfile->wait));
-		if (epfile->dentry) {
-			d_delete(epfile->dentry);
-			dput(epfile->dentry);
-			epfile->dentry = NULL;
-		}
-	}
-
-	kfree(epfiles);
 }
 
 static void ffs_func_eps_disable(struct ffs_function *func)
